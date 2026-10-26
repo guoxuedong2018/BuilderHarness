@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""Render the bilingual architecture SVGs using only Python's standard library.
+
+Run from any directory: python3 docs/diagrams/render_architecture.py
+Keep labels, layout and accessibility text here; do not hand-edit generated SVGs.
+"""
+
+from html import escape
+from pathlib import Path
+
+
+ASSETS = Path(__file__).resolve().parents[1] / "assets"
+PALETTE = {
+    "ink": "#19273D",
+    "muted": "#53647A",
+    "line": "#CBD5E1",
+    "arrow": "#687C96",
+    "blue": "#355CC9",
+    "green": "#28755E",
+    "purple": "#7252A8",
+}
+
+LABELS = {
+    "en": {
+        "file": "architecture.svg",
+        "title": "BuilderHarness · Product architecture",
+        "subtitle": "Specs, running prototypes and review in one repository",
+        "description": (
+            "Browser review and Studio, terminal commands, and agent hosts access local "
+            "Vite integration, shared CLI pipelines and host bridges. They use the host "
+            "repository's specs, application source, review JSON and Markdown content. "
+            "MCP access is read-only. Media tools and publishing destinations are optional "
+            "integrations. These are component groups, not separately deployed services."
+        ),
+        "boundary": "YOUR PROJECT + LOCAL TOOLING",
+        "entries": "01  ENTRY POINTS",
+        "entryCards": [
+            ("Browser", "Review + Studio", "React / Vue 2 adapter"),
+            ("Terminal", "CLI + project skills", "Specs · reviews · content"),
+            ("Agent hosts", "DSH / Electron · MCP", "Host-managed agent runtime"),
+        ],
+        "requests": ["local HTTP", "commands", "tools / stdio"],
+        "tools": "02  LOCAL EXECUTION",
+        "toolCards": [
+            ("Vite integration", ["Source anchors", "Review + Studio APIs", "Host wiring"], "vite.mjs · server/"),
+            ("CLI + pipelines", ["Spec + reference checks", "Content state + media", "PRD + publishing"], "bin/ · pipeline/"),
+            ("Host integration", ["DSH domain actions", "Workspace summaries", "Read-only MCP"], "integrations/host/"),
+        ],
+        "shared": "Shared modules; each entry exposes its own operations",
+        "filesArrow": "Read / write project artifacts*",
+        "files": "03  REPOSITORY FILES",
+        "fileCards": [
+            ("Specs", "docs/features/"),
+            ("App source", "src/ or web/"),
+            ("Reviews", "docs/reviews/"),
+            ("Content + state", "docs/kb/"),
+        ],
+        "metadata": "Markdown content · JSON review state · media recipes and assets",
+        "access": "*MCP is read-only. Other entries expose specific write operations.",
+        "optional": "optional",
+        "integrations": "OPTIONAL INTEGRATIONS",
+        "media": "Media capture",
+        "mediaLines": ["Chrome / CDP", "ffmpeg for clips + GIFs"],
+        "publishing": "Publishing",
+        "publishLines": ["Destination adapter", "Configured by the host"],
+        "outside": ["Tools may run locally;", "publishing may leave the machine."],
+        "footer": "Checks inform review. Your workflow or CI enforces release policy.",
+    },
+    "zh-CN": {
+        "file": "architecture.zh-CN.svg",
+        "title": "BuilderHarness · 产品架构",
+        "subtitle": "在同一个仓库中连接需求规格、可运行原型与评审",
+        "description": (
+            "浏览器评审与 Studio、命令行和 Agent 宿主连接本地 Vite 集成、共享 CLI 管线及宿主桥接。"
+            "各入口使用宿主仓库中的规格、应用源码、批注 JSON 和 Markdown 内容。MCP 只读。"
+            "媒体工具和发布目的地是可选集成。图中是组件分组，不是需要独立部署的服务。"
+        ),
+        "boundary": "你的项目与本地工具",
+        "entries": "01  使用入口",
+        "entryCards": [
+            ("浏览器", "评审 + Studio", "React / Vue 2 适配层"),
+            ("终端", "CLI + 项目技能", "规格 · 批注 · 内容"),
+            ("Agent 宿主", "DSH / Electron · MCP", "Agent 运行时由宿主管理"),
+        ],
+        "requests": ["本地 HTTP", "命令调用", "工具 / stdio"],
+        "tools": "02  本地执行",
+        "toolCards": [
+            ("Vite 集成", ["源码坐标注入", "评审与 Studio 接口", "宿主配置桥接"], "vite.mjs · server/"),
+            ("CLI 与共享管线", ["规格与引用检查", "内容状态与媒体处理", "PRD 与发布流程"], "bin/ · pipeline/"),
+            ("宿主集成", ["DSH 领域操作", "工作区摘要", "只读 MCP"], "integrations/host/"),
+        ],
+        "shared": "复用模块；各入口提供的操作范围不同",
+        "filesArrow": "读取 / 写入项目文件*",
+        "files": "03  仓库文件",
+        "fileCards": [
+            ("需求规格", "docs/features/"),
+            ("应用源码", "src/ 或 web/"),
+            ("评审批注", "docs/reviews/"),
+            ("内容与状态", "docs/kb/"),
+        ],
+        "metadata": "Markdown 正文 · JSON 复核状态 · 媒体配方与产物",
+        "access": "*MCP 入口只读，其他入口提供各自支持的写入操作。",
+        "optional": "按需调用",
+        "integrations": "可选集成",
+        "media": "媒体采集",
+        "mediaLines": ["Chrome / CDP", "ffmpeg 处理视频与 GIF"],
+        "publishing": "内容发布",
+        "publishLines": ["目的地适配器", "由宿主配置"],
+        "outside": ["工具可以在本机运行；", "发布可能访问外部服务。"],
+        "footer": "检查为评审提供依据；发布门禁由项目工作流或 CI 执行。",
+    },
+}
+
+
+def render(labels, language):
+    out = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<!-- Generated by docs/diagrams/render_architecture.py. -->',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1036" '
+        f'viewBox="0 0 1280 1036" role="img" aria-labelledby="title description" xml:lang="{language}">',
+        f'<title id="title">{escape(labels["title"])}</title>',
+        f'<desc id="description">{escape(labels["description"])}</desc>',
+        '<defs>',
+        '<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" '
+        'markerWidth="6" markerHeight="6" orient="auto-start-reverse">',
+        f'<path d="M 1 1 L 9 5 L 1 9 z" fill="{PALETTE["arrow"]}"/>',
+        '</marker>',
+        '</defs>',
+        '<g font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Arial, PingFang SC, Microsoft YaHei, sans-serif">',
+    ]
+
+    def box(x, y, width, height, fill="white", stroke="line", radius=12):
+        color = PALETTE.get(stroke, stroke)
+        out.append(
+            f'<rect x="{x}" y="{y}" width="{width}" height="{height}" '
+            f'rx="{radius}" fill="{fill}" stroke="{color}" stroke-width="1.25"/>'
+        )
+
+    def text(x, y, value, size=18, weight=400, color="ink", mono=False):
+        font = ' font-family="ui-monospace, SFMono-Regular, Consolas, monospace"' if mono else ""
+        out.append(
+            f'<text x="{x}" y="{y}" font-size="{size}" font-weight="{weight}" '
+            f'fill="{PALETTE.get(color, color)}"{font}>{escape(value)}</text>'
+        )
+
+    def line(x1, y1, x2, y2, color="line", dashed=False, arrow=False):
+        extras = ' stroke-dasharray="5 5"' if dashed else ""
+        if arrow:
+            extras += ' marker-end="url(#arrow)"'
+        out.append(
+            f'<path d="M {x1} {y1} L {x2} {y2}" fill="none" '
+            f'stroke="{PALETTE.get(color, color)}" stroke-width="1.7"{extras}/>'
+        )
+
+    box(0, 0, 1280, 1036, stroke="white", radius=0)
+    text(32, 53, labels["title"], 30, 700)
+    text(32, 87, labels["subtitle"], 18, color="muted")
+
+    box(32, 120, 900, 860, "#F8FAFD", radius=20)
+    text(56, 152, labels["boundary"], 14, 700, "muted")
+    text(56, 188, labels["entries"], 14, 700, "blue")
+    for x, (title, first, second) in zip((56, 342, 628), labels["entryCards"]):
+        box(x, 208, 270, 126)
+        line(x + 20, 227, x + 50, 227, "blue")
+        text(x + 20, 258, title, 22, 650)
+        text(x + 20, 288, first, 17)
+        text(x + 20, 314, second, 16, color="muted")
+
+    for x, label in zip((191, 477, 763), labels["requests"]):
+        line(x, 338, x, 397, "arrow", arrow=True)
+        text(x + 15, 376, label, 16, color="muted")
+
+    box(56, 408, 842, 260, "#F0F4FE", stroke="#CCD7F3", radius=16)
+    text(76, 440, labels["tools"], 14, 700, "blue")
+    for x, (title, details, source) in zip((76, 350, 624), labels["toolCards"]):
+        box(x, 464, 254, 156, stroke="#D8E1F4")
+        text(x + 18, 496, title, 20, 650)
+        for i, detail in enumerate(details):
+            text(x + 18, 526 + i * 24, detail, 16, color="muted")
+        text(x + 18, 602, source, 14, color="blue", mono=True)
+    text(76, 648, labels["shared"], 15, color="muted")
+
+    line(477, 672, 477, 739, "arrow", arrow=True)
+    text(493, 714, labels["filesArrow"], 16, color="muted")
+
+    box(56, 750, 842, 174, "#F1F8F4", stroke="#C8DFD3", radius=16)
+    text(76, 781, labels["files"], 14, 700, "green")
+    for i, (title, location) in enumerate(labels["fileCards"]):
+        x = 76 + i * 204
+        if i:
+            line(x - 14, 801, x - 14, 860, "#C8DFD3")
+        text(x, 819, title, 18, 650)
+        text(x, 848, location, 15, color="green", mono=language == "en" or i != 1)
+    text(76, 900, labels["metadata"], 16, color="muted")
+    text(56, 952, labels["access"], 14, color="muted")
+
+    box(980, 438, 268, 320, "#F8F5FC", stroke="#DCD2EB", radius=16)
+    text(1000, 471, labels["integrations"], 13, 700, "purple")
+    text(1000, 512, labels["media"], 20, 650)
+    for i, value in enumerate(labels["mediaLines"]):
+        text(1000, 542 + i * 25, value, 16, color="muted")
+    line(1000, 587, 1228, 587, "#DCD2EB")
+    text(1000, 619, labels["publishing"], 20, 650)
+    for i, value in enumerate(labels["publishLines"]):
+        text(1000, 649 + i * 25, value, 16, color="muted")
+    for i, value in enumerate(labels["outside"]):
+        text(980, 789 + i * 23, value, 14, color="muted")
+    line(900, 534, 970, 534, "arrow", dashed=True, arrow=True)
+    text(909, 518, labels["optional"], 12, color="muted")
+
+    text(32, 1016, labels["footer"], 16, 500, "muted")
+    out.extend(["</g>", "</svg>"])
+    return "\n".join(out) + "\n"
+
+
+def main():
+    ASSETS.mkdir(parents=True, exist_ok=True)
+    for language, labels in LABELS.items():
+        target = ASSETS / labels["file"]
+        target.write_text(render(labels, language), encoding="utf-8")
+        print(target)
+
+
+if __name__ == "__main__":
+    main()
