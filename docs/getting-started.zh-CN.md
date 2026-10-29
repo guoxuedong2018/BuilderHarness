@@ -5,6 +5,11 @@
 可先在克隆的仓库中执行 `npm run demo` 体验评审界面。以下步骤将套件接入已有 Vite
 应用；最小示例假设 `package.json`、`vite.config.js` 和 `src/` 位于同一个项目根目录。
 
+## 已有 Agent 项目
+
+先阅读[已有项目接入与迁移说明](./migration-0.9.md)。默认 `init` 接入当前 Codex /
+Claude Code 工作流，无需前端适配；下面的章节介绍可选 Vite 浏览器集成。
+
 ## 环境要求
 
 - 本指南使用 Node.js 22 或更高版本及 npm。包声明目前为 Node.js >=18，但 CDP 媒体
@@ -20,18 +25,19 @@
 ```bash
 npm ci
 npm pack
+npm pack ./packages/browser
 ```
 
 `npm pack` 会输出生成的压缩包名称。在宿主项目中使用它的绝对路径，替换下面的示例路径：
 
 ```bash
 cd /path/to/your-vite-app
-npm install --save-dev /path/to/builderharness-VERSION.tgz less
-npx builderharness init --list
-npx builderharness init
+npm install --save-dev /path/to/builderharness-VERSION.tgz /path/to/builderharness-browser-VERSION.tgz less
+npx builderharness init --scaffold --list
+npx builderharness init --scaffold
 ```
 
-`init` 复制模板、项目指引、技能和初始内容配置；未指定 `--force` 时保留已有文件。
+`init --scaffold` 复制模板、项目指引、技能和初始内容配置；未指定 `--force` 时保留已有文件。
 它不会自动修改 Vite 配置或应用入口。请按项目实际情况调整生成的指引和
 `src/config/frs-map.js`。
 

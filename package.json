@@ -1,6 +1,6 @@
 {
   "name": "builderharness",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "BuilderHarness — an agent harness for Product Builders: spec-gated, same-stack prototype as source of truth, review before ship, with production pieces connected through adapters.",
   "license": "MIT",
   "type": "module",
@@ -49,10 +49,13 @@
     "./tokens.css": "./ui-spec/tokens.css",
     "./tailwind.config.js": "./ui-spec/impl/react/tailwind.config.cjs",
     "./package.json": "./package.json",
-    "./tailwind.config.cjs": "./ui-spec/impl/react/tailwind.config.cjs"
+    "./tailwind.config.cjs": "./ui-spec/impl/react/tailwind.config.cjs",
+    "./context": "./integrations/host/src/task-context.mjs",
+    "./mcp": "./integrations/host/src/mcp.mjs"
   },
   "bin": {
-    "builderharness": "./bin/builderharness.mjs"
+    "builderharness": "./bin/builderharness.mjs",
+    "builderharness-mcp": "./integrations/host/src/mcp.mjs"
   },
   "files": [
     "bin",
@@ -74,6 +77,7 @@
     "integrations/desktop/README.md",
     "integrations/desktop/package.json",
     "integrations/desktop/main.cjs",
+    "integrations/desktop/starter-project.mjs",
     "integrations/desktop/preload.cjs",
     "integrations/desktop/onboarding.html",
     "integrations/desktop/onboarding.css",
@@ -89,10 +93,12 @@
     "README.zh-CN.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
-    "LICENSE"
+    "LICENSE",
+    "packages/browser/package.json",
+    "packages/browser/README.md"
   ],
   "scripts": {
-    "check": "node scripts/check.mjs && node bin/builderharness.mjs check-frs && node scripts/check-ui-spec.mjs && node scripts/check-public-deps.mjs && node integrations/test-integrations.mjs && node scripts/test-scaffold.mjs",
+    "check": "node scripts/check.mjs && node bin/builderharness.mjs check-frs && node scripts/check-ui-spec.mjs && node scripts/check-public-deps.mjs && node integrations/test-integrations.mjs && node scripts/test-scaffold.mjs && node --test scripts/test-agent-workflow.mjs",
     "test:scaffold": "node scripts/test-scaffold.mjs",
     "test:deploy-skill": "node scripts/test-deploy-skill-e2e.mjs",
     "test:publish-gateway": "node scripts/test-publish-gateway.mjs",
@@ -101,13 +107,17 @@
     "build:demo": "node scripts/demo.mjs build",
     "preflight": "node scripts/preflight-dist.mjs",
     "prepublishOnly": "npm run check",
-    "check:frs": "node bin/builderharness.mjs check-frs"
+    "check:frs": "node bin/builderharness.mjs check-frs",
+    "test:workflow": "node --test scripts/test-agent-workflow.mjs",
+    "test:packages": "node scripts/test-packages.mjs",
+    "test:agents": "node scripts/test-agent-hosts.mjs"
   },
   "peerDependencies": {
     "less": ">=3",
     "tailwindcss": ">=4",
     "vite": ">=5",
-    "vue": "^2.7.0"
+    "vue": "^2.7.0",
+    "@builderharness/browser": "^0.9.0"
   },
   "peerDependenciesMeta": {
     "less": {
@@ -118,9 +128,23 @@
     },
     "vue": {
       "optional": true
+    },
+    "@builderharness/browser": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
     }
   },
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "less": "^4.9.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^4.3.3",
+    "vite": "^6.4.4",
     "@babel/generator": "^7.29.8",
     "@babel/parser": "^7.29.9",
     "@babel/traverse": "^7.29.10",
@@ -132,15 +156,6 @@
     "react-dom": "^19.3.0",
     "tailwind-merge": "^3.7.0",
     "valtio": "^2.3.2"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
-    "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
-    "less": "^4.9.1",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^4.3.3",
-    "vite": "^6.4.4"
   },
   "overrides": {
     "postcss-selector-parser": "^7.1.6"

@@ -7,6 +7,12 @@ The steps below add the toolkit to an existing Vite application. The minimal
 example assumes `package.json`, `vite.config.js` and `src/` share one project
 root.
 
+## Existing agent projects
+
+Start with [the existing-project and migration guide](./migration-0.9.md). Default
+`init` connects the current Codex / Claude Code workflow without a frontend adapter.
+The following sections describe the optional Vite browser integration.
+
 ## Requirements
 
 - Node.js 22 or later and npm for this guide. The manifest currently declares
@@ -25,6 +31,7 @@ In the BuilderHarness checkout:
 ```bash
 npm ci
 npm pack
+npm pack ./packages/browser
 ```
 
 `npm pack` prints the generated tarball name. Use its absolute path in your
@@ -32,12 +39,12 @@ host application, replacing the example path below:
 
 ```bash
 cd /path/to/your-vite-app
-npm install --save-dev /path/to/builderharness-VERSION.tgz less
-npx builderharness init --list
-npx builderharness init
+npm install --save-dev /path/to/builderharness-VERSION.tgz /path/to/builderharness-browser-VERSION.tgz less
+npx builderharness init --scaffold --list
+npx builderharness init --scaffold
 ```
 
-`init` copies templates, project instructions, skills and starter content
+`init --scaffold` copies templates, project instructions, skills and starter content
 configuration. Existing files are preserved unless `--force` is supplied. It
 does not wire the Vite plugin or rewrite your application entry point.
 Review the generated instructions and `src/config/frs-map.js` for your project.

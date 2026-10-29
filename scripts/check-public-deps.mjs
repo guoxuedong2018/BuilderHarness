@@ -67,6 +67,17 @@ if (!registries.length) {
   }
 }
 
+// Keep the optional runtime profile subject to the same publication rules.
+const browser = JSON.parse(await readFile(path.join(ROOT, "packages/browser/package.json"), "utf8"));
+for (const [name, spec] of Object.entries(browser.dependencies ?? {})) {
+  checked += 1;
+  if (NON_PUBLIC_SPEC.test(spec)) fail(`browser.dependencies.${name} uses non-registry spec "${spec}"`);
+}
+checked += 3;
+if (browser.publishConfig?.registry !== PUBLIC_REGISTRY) fail(`browser publishConfig.registry must be ${PUBLIC_REGISTRY}`);
+if (browser.version !== pkg.version) fail("browser and base versions must match");
+if (Object.keys(pkg.dependencies ?? {}).length) fail("base runtime must have zero dependencies; use an optional capability profile");
+
 if (failures) {
   console.error(`\n${failures} public dependency check(s) failed (${checked} checked).`);
   process.exit(1);

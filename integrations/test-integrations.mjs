@@ -368,6 +368,16 @@ async function testMcp(root) {
   assert.equal(contextValue.files.length, 1);
   assert.equal(contextValue.files[0].file, "guides/import.md");
 
+  const taskContext = await request("tools/call", {
+    name: "builderharness_context",
+    arguments: { task: "import", files: ["docs/kb/guides/import.md"], maxChars: 2000, maxScan: 100 },
+  });
+  assert.equal(taskContext.isError, undefined);
+  const evidence = JSON.parse(taskContext.content[0].text);
+  assert.ok(evidence.sources.some((source) => source.file === "docs/kb/guides/import.md"));
+  assert.ok(evidence.coverage.chars <= 2000);
+  assert.ok(evidence.sources.every((source) => source.verifiedBehavior === false));
+
   child.stdin.end();
   rl.close();
   await new Promise((resolve) => child.once("exit", resolve));

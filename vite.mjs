@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { resolveBrowserDependency } from "./build/browser-deps.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { anchorLoc as anchorLocPlugin } from "./build/anchor-loc.js";
@@ -8,12 +9,14 @@ import { studioServer } from "./server/studio-server.js";
 
 const KIT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_DIR = path.join(KIT_DIR, "client");
-const KIT_MODULES = path.join(KIT_DIR, "node_modules");
-/** Runtime dependencies of the toolkit UI (see package.json). Hosts don't install them. */
+
+/** Runtime dependencies supplied by the optional @builderharness/browser profile. */
 const KIT_ALIASES = [
   ["@xyflow/react", "@xyflow/react"],
   ["@xyflow/react/dist/style.css", "@xyflow/react/dist/style.css"],
   ["valtio", "valtio"],
+  ["clsx", "clsx"],
+  ["tailwind-merge", "tailwind-merge"],
   // Flow chart preview in the studio (Mermaid code blocks in the content).
   ["mermaid", "mermaid/dist/mermaid.core.mjs"],
 ];
@@ -21,10 +24,10 @@ const KIT_ALIASES = [
 /** Used only when the host has no React of its own (vendored toolkit checkout). */
 const REACT_ALIASES = [
   ["react", "react"],
-  ["react/jsx-runtime", "react/jsx-runtime.js"],
-  ["react/jsx-dev-runtime", "react/jsx-dev-runtime.js"],
+  ["react/jsx-runtime", "react/jsx-runtime"],
+  ["react/jsx-dev-runtime", "react/jsx-dev-runtime"],
   ["react-dom", "react-dom"],
-  ["react-dom/client", "react-dom/client.js"],
+  ["react-dom/client", "react-dom/client"],
 ];
 
 function hostHasReact(root) {
@@ -146,16 +149,15 @@ export function builderHarness({
             alias: [
               // The host may import the toolkit by bare specifier.
               { find: /^builderharness$/, replacement: path.join(CLIENT_DIR, "index.js") },
-              // Toolkit runtime dependencies may be installed locally (vendored
-              // checkout) or hoisted by the host package manager. Alias only
-              // when the local copy exists, so hoisted installs still resolve.
-              ...(hostHasReact(root) ? [] : REACT_ALIASES).filter(([, rel]) => existsSync(path.join(KIT_MODULES, rel))).map(([spec, rel]) => ({
+              // Resolve development deps or the optional profile's own tree;
+              // do not assume its transitive dependencies were hoisted.
+              ...(hostHasReact(root) ? [] : REACT_ALIASES).map(([spec, rel]) => ({
                 find: new RegExp(`^${spec.replace(/[/.]/g, "\\$&")}$`),
-                replacement: path.join(KIT_MODULES, rel),
+                replacement: resolveBrowserDependency(rel, root),
               })),
-              ...KIT_ALIASES.filter(([, rel]) => existsSync(path.join(KIT_MODULES, rel))).map(([spec, rel]) => ({
+              ...KIT_ALIASES.map(([spec, rel]) => ({
                 find: new RegExp(`^${spec.replace(/[/.]/g, "\\$&")}$`),
-                replacement: path.join(KIT_MODULES, rel),
+                replacement: resolveBrowserDependency(rel, root),
               })),
             ],
             // One React for the host and the toolkit. Without this, a local

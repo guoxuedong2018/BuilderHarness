@@ -24,6 +24,7 @@
     },
     "files": [
       "main.cjs",
+      "starter-project.mjs",
       "preload.cjs",
       "onboarding.html",
       "onboarding.css",
@@ -51,7 +52,14 @@
           "pipeline/**/*",
           "scaffold/**/*",
           "docs/templates/**/*",
-          "package.json"
+          "package.json",
+          "integrations/host/src/**/*",
+          "packages/browser/**/*",
+          "build/**/*",
+          "client/**/*",
+          "server/**/*",
+          "ui-spec/**/*",
+          "vite.mjs"
         ]
       },
       {

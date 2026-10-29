@@ -1,4 +1,5 @@
 import path from "node:path";
+import { importBrowserDependency } from "./browser-deps.js";
 
 /**
  * Anchor source locations (L1) · Vue SFC plugin
@@ -76,8 +77,8 @@ function collectElements(node, out) {
 
 let compilerPromise = null;
 
-function loadCompiler() {
-  compilerPromise ??= import("vue/compiler-sfc").catch((error) => {
+function loadCompiler(root) {
+  compilerPromise ??= importBrowserDependency("vue/compiler-sfc", root).catch((error) => {
     compilerPromise = null;
     throw new Error(
       "builderharness: source anchor injection needs `vue` >= 2.7 (vue/compiler-sfc). " +
@@ -100,7 +101,7 @@ export function anchorLoc({ root = process.cwd() } = {}) {
       const rel = path.relative(root, file).split(path.sep).join("/");
       if (!rel || rel.startsWith("..")) return null;
 
-      const { parseComponent, compileTemplate } = await loadCompiler();
+      const { parseComponent, compileTemplate } = await loadCompiler(root);
 
       let sfc;
       try {

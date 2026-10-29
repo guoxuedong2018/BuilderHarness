@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import * as t from "@babel/types";
+import { importBrowserDependency } from "./browser-deps.js";
 
 /**
  * Anchor source locations (L1) · React / JSX plugin
@@ -30,13 +30,15 @@ function componentNameOf(filename) {
 }
 
 let babelPromise = null;
-function loadBabel() {
+function loadBabel(root) {
   babelPromise ??= Promise.all([
-    import("@babel/parser"),
-    import("@babel/traverse"),
-    import("@babel/generator"),
+    importBrowserDependency("@babel/parser", root),
+    importBrowserDependency("@babel/traverse", root),
+    importBrowserDependency("@babel/generator", root),
+    importBrowserDependency("@babel/types", root),
   ])
-    .then(([parser, traverse, generator]) => ({
+    .then(([parser, traverse, generator, types]) => ({
+      t: types,
       parse: parser.parse,
       // Rollup/CJS interop can nest `default` twice.
       traverse: traverse.default?.default ?? traverse.default ?? traverse,
@@ -65,7 +67,7 @@ export function anchorLocReact({ root = process.cwd() } = {}) {
       const rel = path.relative(root, file).split(path.sep).join("/");
       if (!rel || rel.startsWith("..")) return null;
 
-      const { parse, traverse, generate } = await loadBabel();
+      const { parse, traverse, generate, t } = await loadBabel(root);
       let ast;
       try {
         ast = parse(code, {
