@@ -11,7 +11,7 @@ const BIN = path.join(ROOT, "bin", "builderharness.mjs");
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "builderharness-scaffold-"));
 
 function init(args) {
-  const result = spawnSync(process.execPath, [BIN, "init", "--target", tmp, ...args], {
+  const result = spawnSync(process.execPath, [BIN, "init", "--scaffold", "--target", tmp, ...args], {
     cwd: ROOT,
     encoding: "utf8",
   });

@@ -81,7 +81,7 @@ Cursor / Claude configuration:
 ```json
 {
   "mcpServers": {
-    "bee-press": {
+    "builderharness": {
       "command": "node",
       "args": ["/absolute/path/to/builderharness/integrations/host/src/mcp.mjs"],
       "env": {
@@ -109,3 +109,14 @@ Cursor / Claude configuration:
   `0.2.1-rc.2`; pin a compatible version before publishing.
 - `ctx.builderharness` is registered as a Cordis service, so other plugins can
   `inject: ["builderharness"]` instead of reaching into the bundle internals.
+
+## Existing-agent task evidence (0.9)
+
+The base package also exposes the same server as `builderharness-mcp`.
+`builderharness_context` retains the legacy topic-only KB response. Supply `task`
+and optional relative `files`, `limit`, `maxChars` and `maxScan` for bounded project
+instructions, decisions, specs, source and unexecuted verification entries. Missing,
+truncated or conflicting evidence requires follow-up by the host agent.
+
+Use `builderharness init` for project instructions and native review skills; MCP
+is optional and read-only. See [migration and real-host verification](../../docs/migration-0.9.md).

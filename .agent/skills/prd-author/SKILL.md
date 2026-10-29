@@ -26,7 +26,8 @@ PM / Agent 产出：`FRS.json`、`README.md`、`FLOW.md`、`STATE.md`（按需�
 
 ## 步骤
 
-1. **先形成设计依据。** 读现状源码、路由、已有需求和用户最近确认的决定。
+1. **先形成设计依据。** 先用 `builderharness context "<任务>" --json` 找相关来源，再读现状源码、已有需求和用户最近确认的决定；UI 任务按需要读路由。
+   核查历史前提与反例，允许新目标修订旧决定。建议和未决假设不写成已确认规则；非 UI 项目不虚构页面或路由。
    完成「意图 → 现状 → 目标 → 用户任务 → 位置/数据对应 → 反例走查」。
 2. **FRS.json。** 从 `docs/templates/FRS.json` 复制，填：
    - `goal` / `background` / `scope.include` / `scope.exclude`

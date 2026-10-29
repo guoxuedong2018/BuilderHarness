@@ -20,6 +20,7 @@ const PIPELINE_DIR = path.join(KIT_ROOT, "pipeline");
 
 const COMMANDS = {
   init: "init.mjs",
+  context: "context.mjs",
   kb: "kb.mjs",
   review: "review.mjs",
   prd: "prd.mjs",
@@ -49,7 +50,8 @@ Usage:
   builderharness <command> [options]
 
 Commands:
-  init                     Copy the project scaffold (docs/templates, skills, kb configs)
+  init                     Connect the existing agent (use --scaffold for full templates)
+  context                  Read bounded task evidence, decisions and verification entries
   kb                       Content workspace CLI (status / shoot / ack / check / new …)
   review                   Review comments CLI (open / resolve / reply …)
   prd                      Build and publish a PRD from a feature spec

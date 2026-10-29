@@ -13,12 +13,14 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "vite": "^6.4.4",
-    "builderharness": "^0.8.0"
+    "builderharness": "^0.9.0",
+    "@builderharness/browser": "^0.9.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "less": "^4.9.1"
   }
 }

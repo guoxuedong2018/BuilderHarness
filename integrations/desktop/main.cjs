@@ -742,7 +742,7 @@ ipcMain.handle("builderharness:create-project", async (_event, { parent, name })
   await fs.promises.mkdir(root, { recursive: true });
   const bin = path.join(KIT_ROOT, "bin", "builderharness.mjs");
   const nodeEnv = { ...process.env, ELECTRON_RUN_AS_NODE: "1", BUILDERHARNESS_KIT_ROOT: KIT_ROOT };
-  await execFileAsync(process.execPath, [bin, "init", "--target", root], {
+  await execFileAsync(process.execPath, [bin, "init", "--scaffold", "--target", root], {
     cwd: root,
     env: nodeEnv,
     maxBuffer: 20 * 1024 * 1024,
@@ -756,15 +756,8 @@ ipcMain.handle("builderharness:create-project", async (_event, { parent, name })
   });
   const starter = path.join(KIT_ROOT, "scaffold", "starter");
   if (fs.existsSync(starter)) await copyDirectory(starter, root);
-  let pkg = {};
-  try {
-    pkg = JSON.parse(await fs.promises.readFile(path.join(starter, "package.json"), "utf8"));
-  } catch {
-    pkg = { private: true, type: "module" };
-  }
-  pkg.name = safeName.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase() || "builderharness-project";
-  pkg.dependencies = { ...(pkg.dependencies || {}), builderharness: `file:${KIT_ROOT}` };
-  await fs.promises.writeFile(path.join(root, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+  const { configureStarterProject } = await import("./starter-project.mjs");
+  await configureStarterProject({ root, kitRoot: KIT_ROOT, name: safeName });
   return root;
 });
 ipcMain.handle("builderharness:choose-scan-root", async () => {

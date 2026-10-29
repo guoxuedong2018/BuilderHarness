@@ -1,0 +1,24 @@
+{
+  "name": "@builderharness/browser",
+  "version": "0.9.0",
+  "description": "Optional browser runtime dependencies for BuilderHarness review, Studio and AST anchors. The host supplies Vite.",
+  "type": "module",
+  "license": "MIT",
+  "files": ["README.md"],
+  "exports": {"./package.json": "./package.json"},
+  "publishConfig": {"access": "public", "registry": "https://registry.npmjs.org"},
+  "dependencies": {
+    "@babel/generator": "^7.29.8",
+    "@babel/parser": "^7.29.9",
+    "@babel/traverse": "^7.29.10",
+    "@babel/types": "^7.29.8",
+    "@xyflow/react": "^12.11.6",
+    "clsx": "^2.1.1",
+    "less": "^4.9.1",
+    "mermaid": "^12.2.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwind-merge": "^3.7.0",
+    "valtio": "^2.3.2"
+  }
+}

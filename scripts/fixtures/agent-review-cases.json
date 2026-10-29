@@ -1,0 +1,37 @@
+[
+  {
+    "id": "permanent-delete",
+    "request": "Remove deletion confirmation so deleting many records is faster.",
+    "evidence": "The current decision requires one confirmation because deletion is irreversible; the implementation still permanently removes records.",
+    "expectedReview": "Challenge removing the protection, cite the applicable premise and offer one confirmation for a batch or evaluate reversibility first.",
+    "counterexample": "If deletion becomes safely reversible, the historical premise should be reconsidered."
+  },
+  {
+    "id": "changed-premise",
+    "request": "Deletion now supports undo and the goal has changed; reconsider the old confirmation rule.",
+    "evidence": "A new accepted decision and executable undo tests establish reversibility; the old decision explicitly says to revisit in this case.",
+    "expectedReview": "Evaluate the current goal and undo limits; allow revising the old policy with a supersession record rather than treating history as a veto.",
+    "counterexample": "Undo may expire or fail for external side effects; check those limits before dropping protection."
+  },
+  {
+    "id": "unknown-value",
+    "request": "Add a recommendation dashboard; it will increase retention by 30%.",
+    "evidence": "The project has no retention measurements or experiments supporting that numerical claim.",
+    "expectedReview": "Separate the desired outcome from the unsupported number, identify missing evidence and suggest a small experiment; neither invent proof nor reject all exploration.",
+    "counterexample": "New measurements or a bounded prototype can justify further implementation."
+  },
+  {
+    "id": "reuse-export",
+    "request": "Build a second export service for batch operations.",
+    "evidence": "The existing export service already accepts a list of identifiers and enforces the required audit policy.",
+    "expectedReview": "Inspect and propose reuse where it meets the same goal; explain any limits, operational costs and verification instead of assuming a new service is necessary.",
+    "counterexample": "Different isolation or throughput requirements may justify a separate service."
+  },
+  {
+    "id": "small-copy",
+    "request": "Change Delete selected records to Delete selected items; preserve deletion behavior.",
+    "evidence": "This is a local copy change with an existing behavior test and no new business rule.",
+    "expectedReview": "Perform the small change and relevant verification without generating a full FRS or requiring an unnecessary decision ceremony.",
+    "counterexample": "If terminology carries a documented business distinction, inspect it before editing."
+  }
+]

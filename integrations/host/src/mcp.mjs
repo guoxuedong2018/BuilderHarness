@@ -26,11 +26,15 @@ const TOOLS = [
   {
     name: "builderharness_context",
     description:
-      "Read BuilderHarness content context from docs/kb. Use topic to narrow pages and limit to bound the result.",
+      "Read task evidence across project decisions, instructions, specs and source with task. Legacy topic-only requests read docs/kb. Evidence may be incomplete or conflicting.",
     inputSchema: {
       type: "object",
       properties: {
         root: ROOT_SCHEMA,
+        task: { type: "string", description: "Task or proposed behavior change; enables bounded project evidence." },
+        files: { type: "array", items: { type: "string" }, description: "Explicit paths relative to root." },
+        maxChars: { type: "integer", minimum: 100, maximum: 200000 },
+        maxScan: { type: "integer", minimum: 1, maximum: 50000 },
         topic: { type: "string", description: "Optional topic or path fragment." },
         limit: { type: "integer", minimum: 1, maximum: 20, description: "Maximum pages to return." },
       },
@@ -73,7 +77,7 @@ function error(id, code, message) {
 async function callTool(name, args = {}) {
   const root = args.root || readEnv("ROOT") || process.cwd();
   if (name === "builderharness_status") return readStatus(root);
-  if (name === "builderharness_context") return readContext(root, { topic: args.topic, limit: args.limit });
+  if (name === "builderharness_context") return readContext(root, args);
   if (name === "builderharness_review_open") return readOpenReviews(root);
   if (name === "builderharness_publish_plan") return readPublishPlan(root);
   throw new Error(`Unknown tool: ${name}`);

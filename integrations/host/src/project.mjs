@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { readEnv } from "./env.mjs";
 import { detectPrototype } from "./prototype.mjs";
+import { readTaskContext } from "./task-context.mjs";
 
 const MAX_SCAN_FILES = 400;
 const MAX_CONTEXT_FILES = 20;
@@ -253,7 +254,9 @@ export async function readPublishPlan(inputRoot) {
   };
 }
 
-export async function readContext(inputRoot, { topic = "", limit = 8 } = {}) {
+export async function readContext(inputRoot, options = {}) {
+  if (options.task !== undefined || options.files || options.mode === "task") return readTaskContext(resolveRoot(inputRoot), options);
+  const { topic = "", limit = 8 } = options;
   const root = resolveRoot(inputRoot);
   const kbDir = path.join(root, "docs", "kb");
   const files = (await statSafe(kbDir)) ? await walk(kbDir, (_full, name) => name.endsWith(".md")) : [];

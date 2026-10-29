@@ -34,6 +34,17 @@ The fixed sentence for any channel:
 - The gate is not a gold label or a reward-model loop. Passing means the spec
   and the same-stack prototype agree.
 
+## Existing-agent entry
+
+The default entry connects the user's existing Codex / Claude Code project.
+Evidence-based requirement review precedes process sizing: examine goals, active
+constraints, historical premises and alternatives, including flaws in human proposals.
+Historical decisions may be superseded when their premises or goals change. Small
+changes remain lightweight. Scripts collect evidence and run bounded checks; the
+existing agent explains tradeoffs and carries out authorized work. Browser review
+is an optional capability. Do not claim that generated instructions or a passing
+structural check prove the agent loaded the workflow or the product meets intent.
+
 ## Why "harness"
 
 - **Builder** names the buyer and the output perspective: the person who builds

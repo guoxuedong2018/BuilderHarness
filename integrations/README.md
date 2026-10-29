@@ -1,5 +1,8 @@
 # BuilderHarness integrations
 
+For existing Codex / Claude Code projects, start with `builderharness init` and the
+[0.9 migration guide](../docs/migration-0.9.md). DSH and desktop setup remain optional.
+
 This directory is the integration layer for running BuilderHarness beside an agent
 runtime instead of inside a prototype. The dsh plugin now has a right-sidebar
 panel and review write tools; the MCP entrypoint remains read-only.

@@ -1,7 +1,7 @@
 # BuilderHarness scaffold
 
 Host-project files that turn an empty repository into a BuilderHarness workspace.
-The package ships them as plain files; `npx builderharness init` copies them into the
+The package ships them as plain files; `npx builderharness init --scaffold` copies them into the
 current project without overwriting existing files.
 
 ## Contents
@@ -28,10 +28,10 @@ current project without overwriting existing files.
 
 ```bash
 cd your-prototype
-npx builderharness init
-npx builderharness init --list          # show what would be copied
-npx builderharness init --force         # overwrite generated files
-npx builderharness init --only docs     # copy one subtree
+npx builderharness init --scaffold
+npx builderharness init --scaffold --list          # show what would be copied
+npx builderharness init --scaffold --force         # overwrite generated files
+npx builderharness init --scaffold --only docs     # copy one subtree
 ```
 
 After init:
@@ -42,3 +42,5 @@ After init:
 
 The scaffold deliberately contains no product data, internal domains, credentials
 or example business rules. Those belong to the host project.
+
+Default `init` connects an existing agent without the complete scaffold. See [migration](../docs/migration-0.9.md).

@@ -15,6 +15,7 @@ aligned with the product.
 
 | Capability | What is included |
 | :-- | :-- |
+| Assess a proposal | Project evidence and a review skill help the existing agent inspect goals, constraints, historical premises and alternatives before implementation. |
 | Specify a feature | Feature requirement specification (FRS) templates, acceptance criteria and checks for spec, route and screenshot references. |
 | Review the running app | Select an element and leave a comment linked to its source. Anchors fall back to component semantics or geometry when the source location changes. |
 | Work with coding agents | Export open reviews and provide source, spec and content context through the CLI, project skills or an agent host. |
@@ -24,6 +25,23 @@ aligned with the product.
 The working cycle is **specify → implement → review → check → approve**.
 The checks help maintainers make decisions; teams choose how to enforce them in
 their development and release workflows.
+
+## Use your existing coding agent
+
+In your existing Codex or Claude Code session, ask it to initialize BuilderHarness
+while preserving your project's rules. With the package installed locally:
+
+```bash
+npx --no-install builderharness init
+npx --no-install builderharness context "describe the proposed change" --json
+```
+
+The default connects project instructions and a review skill. It helps the agent
+check goals, historical premises, constraints and alternatives before implementation.
+Small changes stay lightweight. It does not start a new model session or require Vite.
+The base CLI has zero runtime dependencies; browser review dependencies are optional.
+See [existing-project setup and 0.9 migration](./docs/migration-0.9.md) for source
+installation, preservation/removal behavior and actual host-validation limits.
 
 ## Try the demo
 

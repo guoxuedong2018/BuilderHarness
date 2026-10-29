@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 — source changes, not published
+
+- Default init connects existing Codex / Claude Code project instructions and review skills; complete templates use init --scaffold.
+- Bounded task evidence includes decisions, scoped instructions, source references and explicit omissions; legacy MCP KB requests remain compatible.
+- Review goals, constraints, historical premises and alternatives before process sizing; record meaningful confirmed decisions and actual verification limits.
+- Base CLI runtime dependencies are empty. Optional @builderharness/browser supplies browser dependencies while existing import paths remain.
+- Added preservation, recovery, package-install and explicit authenticated host acceptance checks. See docs/migration-0.9.md and the feature acceptance record for actual results.
+
 ## 0.8.0 — 2026-10-23
 
 - **Brand and positioning: BuilderHarness** — the README (EN/ZH), brand guide
