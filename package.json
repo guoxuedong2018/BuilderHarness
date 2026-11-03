@@ -98,10 +98,12 @@
     "packages/browser/README.md"
   ],
   "scripts": {
-    "check": "node scripts/check.mjs && node bin/builderharness.mjs check-frs && node scripts/check-ui-spec.mjs && node scripts/check-public-deps.mjs && node integrations/test-integrations.mjs && node scripts/test-scaffold.mjs && node --test scripts/test-agent-workflow.mjs",
+    "check": "node scripts/check.mjs && node bin/builderharness.mjs check-frs && node scripts/check-ui-spec.mjs && node scripts/check-public-deps.mjs && node integrations/test-integrations.mjs && node scripts/test-scaffold.mjs && node --test scripts/test-agent-workflow.mjs scripts/test-prd-patch-ops.mjs scripts/test-prd-publish-flow.mjs scripts/test-check-prototype-syntax.mjs",
     "test:scaffold": "node scripts/test-scaffold.mjs",
     "test:deploy-skill": "node scripts/test-deploy-skill-e2e.mjs",
     "test:publish-gateway": "node scripts/test-publish-gateway.mjs",
+    "test:prd": "node --test scripts/test-prd-patch-ops.mjs scripts/test-prd-publish-flow.mjs",
+    "test:prototype-syntax": "node --test scripts/test-check-prototype-syntax.mjs",
     "test:integrations": "node integrations/test-integrations.mjs",
     "demo": "node scripts/demo.mjs",
     "build:demo": "node scripts/demo.mjs build",

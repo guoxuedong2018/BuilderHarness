@@ -14,6 +14,8 @@ npx builderharness check-routes  # reference host check
 npx builderharness check-frs <KEY>   # 有需求件套时
 ```
 
+`check-prototype-syntax` 除了语法，还查「用了却没声明、也没 import」的标识符（含 JSX 组件名）：只做语法检查时漏一个 import 照样通过，到浏览器里才 ReferenceError、生产构建整页白屏。解析器借宿主依赖链上的 Babel；输出里出现「⚠ 降级」就是这一项没查，汇报时照实写，不当成通过。
+
 ## 手工走查
 
 - 主路径能完成，返回/刷新/深链不丢状态。

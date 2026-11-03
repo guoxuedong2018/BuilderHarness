@@ -125,8 +125,13 @@ interface PublishGateway {
   /** Optional: tells the adapter that the user confirmed the outbound action. */
   setIntent?(text: string): void;
 
-  /** PRD pipeline only. */
-  createBlankDoc(input: { title: string }): Promise<{ docId: string; url?: string }>;
+  /**
+   * PRD pipeline only. `folderId` comes from `prd --folder <id>`; adapters
+   * without folders may ignore it. Patches to an existing PRD arrive in
+   * batches of at most 50 operations (adjacent deletes merged), each one
+   * dry-run first.
+   */
+  createBlankDoc(input: { title: string; folderId?: string }): Promise<{ docId: string; url?: string }>;
   appendImages(input: { docId: string; files: string[] }): Promise<string[]>;
   fetchJsonml(docId: string): Promise<{ body: unknown[]; version: number | string }>;
 

@@ -12,6 +12,7 @@ coverage/
 **/docs/kb/_lock.json
 **/docs/kb/_index.json
 **/docs/kb/_published.json
+**/docs/prd/
 
 integrations/desktop/release/
 
