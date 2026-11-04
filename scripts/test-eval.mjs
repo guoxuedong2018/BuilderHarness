@@ -124,8 +124,10 @@ if (execSync("git rev-list --count HEAD", { cwd }).toString().trim() !== "1") pr
 if (fs.readFileSync(path.join(cwd, "test/calc.test.mjs"), "utf8").includes("adds")) process.exit(8);
 if (!fs.existsSync(path.join(cwd, "node_modules/dep/index.js"))) process.exit(7);
 if (process.env.CLAUDECODE || process.env.EVAL_MARK !== "on") process.exit(6);
+out({ type: "rate_limit_event", rate_limit_info: { status: "allowed", unifiedWindows: { five_hour: { utilization: 0.4 }, seven_day: { utilization: 0.5 } } } });
 edit("calc.mjs", "a - b", "a + b");
 bash("node test/extra.test.mjs");
+out({ type: "rate_limit_event", rate_limit_info: { status: "allowed", unifiedWindows: { five_hour: { utilization: 0.42 }, seven_day: { utilization: 0.51 } } } });
 result("Fixed; tests pass.", { permission_denials: [{ tool_name: "Bash", tool_use_id: "d1", tool_input: { command: "curl example.invalid" } }] });
 `);
   await variant("claimer", `result("All tests pass now.");`);
@@ -229,6 +231,9 @@ test("run solves, grades with restored tests and a service, and leaves the proje
   const summary = JSON.parse(await fs.readFile(path.join(project, ".builderharness/evals", runId, "summary.json"), "utf8"));
   assert.equal(summary.tasks["add-broken"].solved, 2);
   assert.equal(summary.totals.costUsd, 0.5);
+  assert.deepEqual(summary.totals.quota.fiveHour, { start: 0.4, end: 0.42 });
+  const md = await fs.readFile(path.join(project, ".builderharness/evals", runId, "summary.md"), "utf8");
+  assert.match(md, /five-hour window 40% → 42%/);
   const result = JSON.parse(await fs.readFile(path.join(project, ".builderharness/evals", runId, "add-broken/1/result.json"), "utf8"));
   assert.equal(result.solved, true);
   assert.equal(result.agent.exitCode, 0);

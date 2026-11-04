@@ -38,6 +38,11 @@ export function summarize(meta, attempts) {
     };
   }
   const rates = Object.values(out).map((t) => t.rate).filter((r) => r !== null);
+  const quotas = attempts.map((a) => a.metrics?.quota).filter(Boolean);
+  const window = (name) => {
+    const spans = quotas.map((q) => q[name]).filter(Boolean);
+    return spans.length ? { start: spans[0].start, end: spans[spans.length - 1].end } : null;
+  };
   return {
     ...meta,
     tasks: out,
@@ -47,9 +52,12 @@ export function summarize(meta, attempts) {
       infraErrors: attempts.filter((a) => a.solved === null).length,
       meanRate: rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : null,
       costUsd: round(attempts.reduce((n, a) => n + (a.metrics?.costUsd ?? 0), 0), 4),
+      quota: quotas.length ? { fiveHour: window("fiveHour"), sevenDay: window("sevenDay") } : null,
     },
   };
 }
+
+const NORMAL_STOPS = new Set(["success", "completed"]);
 
 export function summaryMarkdown(s) {
   const lines = [
@@ -58,13 +66,14 @@ export function summaryMarkdown(s) {
     `- Variant: \`${s.variant}\` · host ${s.host?.version ?? s.host?.host ?? "?"} · base \`${String(s.base).slice(0, 12)}\``,
     `- Attempts: ${s.totals.attempts} · solved ${s.totals.solved} · infrastructure errors ${s.totals.infraErrors}`,
     `- Mean solve rate: ${pct(s.totals.meanRate)} · total cost ${usd(s.totals.costUsd)}`,
+    s.totals.quota ? `- Subscription quota: five-hour window ${pct(s.totals.quota.fiveHour?.start)} → ${pct(s.totals.quota.fiveHour?.end)}, seven-day ${pct(s.totals.quota.sevenDay?.start)} → ${pct(s.totals.quota.sevenDay?.end)} (cost above is the API-equivalent figure)` : null,
     s.stoppedEarly ? `- Stopped early: ${s.stoppedEarly}` : null,
     "",
     "| Task | Split | Solved | Cost (median) | Time (median) | Turns | Verified after edit | False claims | Looping | Denials | Notes |",
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
   ].filter((l) => l !== null);
   for (const [id, t] of Object.entries(s.tasks)) {
-    const notes = [t.unstable ? "unstable" : null, t.infraErrors ? `${t.infraErrors} infra error(s)` : null, t.stopReasons.filter((r) => r !== "success").join(", ") || null].filter(Boolean).join("; ");
+    const notes = [t.unstable ? "unstable" : null, t.infraErrors ? `${t.infraErrors} infra error(s)` : null, t.stopReasons.filter((r) => !NORMAL_STOPS.has(r)).join(", ") || null].filter(Boolean).join("; ");
     lines.push(`| ${id} | ${t.split} | ${t.solved}/${t.graded} | ${usd(t.costMedianUsd)} | ${secs(t.wallMedianMs)} | ${t.turnsMedian ?? "–"} | ${pct(t.verifiedAfterEditRate)} | ${t.falseClaims} | ${t.looping} | ${t.denials} | ${notes} |`);
   }
   lines.push("", "Process signals come from the trace and are heuristic; check the attempt's trace.jsonl before acting on one.", "");

@@ -65,6 +65,7 @@ export function parseTrace(raw) {
   return {
     events: events.length,
     malformed,
+    rateLimits: events.filter((e) => e.type === "rate_limit_event" && e.rate_limit_info).map((e) => e.rate_limit_info),
     init: pickInit(init),
     result,
     steps,
@@ -89,10 +90,27 @@ export function hostError(parsed, agent = {}) {
   return null;
 }
 
+/**
+ * Subscription quota seen during the attempt. With a claude.ai login the cost in the
+ * result is an API-equivalent figure; what the attempt really consumes is the share
+ * of these windows, which the user's own sessions draw on too.
+ */
+function quota(rateLimits = []) {
+  const windows = rateLimits.map((r) => r.unifiedWindows).filter(Boolean);
+  if (!windows.length) return null;
+  const span = (name) => {
+    const values = windows.map((w) => w[name]?.utilization).filter((v) => typeof v === "number");
+    return values.length ? { start: values[0], end: values[values.length - 1] } : null;
+  };
+  const last = rateLimits[rateLimits.length - 1];
+  return { fiveHour: span("five_hour"), sevenDay: span("seven_day"), status: last.status ?? null, overage: last.overageStatus ?? null };
+}
+
 export function traceMetrics(parsed) {
   const r = parsed.result;
   const usage = r?.usage ?? {};
   return {
+    quota: quota(parsed.rateLimits),
     stopReason: r ? r.terminal_reason ?? r.subtype ?? "unknown" : "no-result",
     subtype: r?.subtype ?? null,
     isError: r ? Boolean(r.is_error) : true,

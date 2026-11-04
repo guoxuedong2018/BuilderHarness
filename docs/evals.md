@@ -195,8 +195,18 @@ Observed with Claude Code 2.1.220 in print mode (first pilot, 2026-11-04):
   `~/.claude/projects/<workspace path>/memory/` for each new workspace. The runner
   copies any memories the agent wrote into the attempt's `memory/` folder and
   removes that project directory when its name carries the run id.
-- The stream also carries `rate_limit_event` lines; they are kept in the trace and
-  otherwise ignored.
+- With a claude.ai login (`apiKeySource: "none"`), `total_cost_usd` is an
+  API-equivalent figure. What a run really consumes is subscription quota, which the
+  user's own sessions share. The stream's `rate_limit_event` lines carry the
+  five-hour and seven-day utilization; the runner records them per attempt
+  (`metrics.quota`) and per run (`summary.md`). Size a baseline against that window,
+  not only against `--max-total-usd`.
+
+Observed with Claude Code 2.1.318 (second pilot, same day): an easy injected defect
+was solved in 22 turns and about two minutes. The agent ran the project's own gates
+after its last edit and checked that its new test fails without the fix. It cost
+$0.47 API-equivalent and about 1% of the five-hour window. No denials, and the
+memory folder stayed empty and was removed.
 
 Not part of `npm run check`: real host runs cost money and need a login. The
 runner's own tests (`npm run test:eval`) use fake agents.
