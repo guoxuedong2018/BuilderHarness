@@ -15,6 +15,7 @@
 - Skills: `prd-author` / `prd-publish` gain the spec-writing discipline (what each rule type covers, leave out what the prototype already shows, one rule per sentence, object + condition + result, no unconfirmed rules, four-question pre-publish check, redline workflow); `requirement-review` gains an M/L design-basis section with `references/design-brief.md` and `references/examples.md`. `.agent` and `scaffold` copies are identical.
 - `AGENTS.md` (root and scaffold) adds eight design principles, collaboration rules and how to realign after a correction. `scripts/fixtures/product-design-cases.json` holds 14 design-review regression scenarios (not yet run against a model).
 - `review open` names the page and element when a source coordinate lands in a shared component; CDP key presses carry key codes so editors that read `keyCode` receive them.
+- The desktop shell's lockfile resolves every package from the public npm registry (same versions and integrity hashes) and pins its own `.npmrc`, since npm does not read the root one from a nested project. `check-public-deps` now covers every committed lockfile and the `.npmrc` beside it.
 
 ## 0.8.0 — 2026-10-23
 
