@@ -149,8 +149,9 @@ since the run started, so one run never mixes two versions of the harness.
 `regrade <runId>` fixes a wrong grader without calling the agent again. After a
 task or `suite.json` changes (a task's hash covers the suite, so its validation
 becomes stale until `validate` passes again), each graded attempt's workspace is
-rebuilt from the snapshot plus its `diff.patch` and graded with the current
-definitions. The earlier verdict stays in `result.json` under `previous`, the old
+rebuilt from the snapshot, the defect that attempt saw (its own copy of
+`inject.patch`, so a later edit to the task's patch does not change the starting
+point) and its `diff.patch`, then graded with the current definitions. The earlier verdict stays in `result.json` under `previous`, the old
 logs in `grade-before-regrade/`, and `--resume` then continues under the new
 definitions. Regrade every attempt of a run, never a chosen few, and record why
 the grader changed.

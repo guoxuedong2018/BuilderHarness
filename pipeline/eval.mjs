@@ -235,6 +235,8 @@ async function attempt(ctx, task, variant, rep, { runId, runDir, workRoot, keep 
   try {
     const ws = await createWorkspace({ ...taskWorkspaceOptions(ctx, task, { inject: true }), variant, dir });
     record.cloned = ws.cloned;
+    // The exact defect this attempt saw, so regrade can rebuild it after the task file changes.
+    if (task.inject) await fs.copyFile(path.join(task.dir, task.inject), path.join(attemptDir, "inject.patch"));
     const env = cleanEnv(process.env, ctx.suite.env);
     const traceFile = path.join(attemptDir, "trace.jsonl");
     record.agent = await runAgent({ cwd: dir, prompt: task.prompt, variant, agent: task.agent, env, traceFile, stderrFile: path.join(attemptDir, "agent.stderr.log") });
@@ -460,7 +462,9 @@ async function regrade(opts) {
     const dir = path.join(workRoot, meta.runId, `regrade-${record.task}-${record.attempt}`);
     await fs.rm(dir, { recursive: true, force: true });
     try {
-      await createWorkspace({ ...taskWorkspaceOptions(ctx, task, { inject: true }), variant, dir });
+      const saved = path.join(attemptDir, "inject.patch");
+      const options = taskWorkspaceOptions(ctx, task, { inject: true });
+      await createWorkspace({ ...options, inject: existsSync(saved) ? saved : options.inject, variant, dir });
       const patch = path.join(attemptDir, "diff.patch");
       if ((await fs.stat(patch)).size > 0) {
         const applied = spawnSync("git", ["apply", "--binary", "--whitespace=nowarn", patch], { cwd: dir, encoding: "utf8" });

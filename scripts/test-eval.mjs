@@ -384,6 +384,8 @@ test("a suite change makes validations stale; regrade applies a corrected grader
   const runId = runOf(cli("run", "--variant", "fixer", "add-broken", "--repeat", "1"));
   const resultFile = path.join(project, ".builderharness/evals", runId, "add-broken/1/result.json");
   assert.equal(JSON.parse(await fs.readFile(resultFile, "utf8")).solved, true);
+  const savedInject = path.join(project, ".builderharness/evals", runId, "add-broken/1/inject.patch");
+  assert.equal(await fs.readFile(savedInject, "utf8"), await fs.readFile(path.join(project, "evals/tasks/add-broken/inject.patch"), "utf8"), "the attempt keeps the defect it saw");
 
   // A stricter suite: the fix in calc.mjs is now off limits.
   const suiteFile = path.join(project, "evals/suite.json");
