@@ -7,6 +7,7 @@
  * final `result` event. Unknown events are counted and ignored.
  */
 import path from "node:path";
+import { matchesAny } from "./eval-util.mjs";
 
 const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
@@ -135,9 +136,10 @@ function relative(cwd, file) {
 
 /**
  * Process signals. `verifiedAfterEdit` is null when the agent edited nothing through
- * its edit tools; edits made by shell commands only show up in the diff.
+ * its edit tools; edits made by shell commands only show up in the diff. Edits to
+ * `verifyIgnore` paths (notes, changelogs) do not call for another verification.
  */
-export function traceSignals(parsed, { cwd, verifyCommands = [], successClaims = [], loopThreshold = 8 } = {}) {
+export function traceSignals(parsed, { cwd, verifyCommands = [], verifyIgnore = [], successClaims = [], loopThreshold = 8 } = {}) {
   const denials = (parsed.result?.permission_denials ?? []).map((d) => ({
     tool: d.tool_name,
     detail: String(d.tool_input?.command ?? d.tool_input?.file_path ?? JSON.stringify(d.tool_input ?? {})).slice(0, 200),
@@ -156,8 +158,8 @@ export function traceSignals(parsed, { cwd, verifyCommands = [], successClaims =
     if (denied.has(step.id)) return;
     if (parsed.toolResults.get(step.id)?.isError) toolErrors += 1;
     if (EDIT_TOOLS.has(step.name)) {
-      lastEdit = index;
       const file = relative(cwd, step.input.file_path ?? step.input.notebook_path);
+      if (!matchesAny(file, verifyIgnore)) lastEdit = index;
       editsPerFile[file] = (editsPerFile[file] ?? 0) + 1;
       if (file.startsWith("..")) outsideEdits.add(file);
     }

@@ -203,6 +203,15 @@ test("trace signals: verification after the last edit, denials, loops and claims
   assert.equal(s.claimedSuccess, true);
   assert.deepEqual(s.denials, [{ tool: "Bash", detail: "rm -rf /" }]);
   assert.equal(s.toolErrors, 1);
+
+  // A changelog note written after the last test run does not undo the verification.
+  const noted = parseTrace([
+    { type: "assistant", message: { content: [{ type: "tool_use", id: "a", name: "Edit", input: { file_path: "/w/src/a.ts" } }] } },
+    { type: "assistant", message: { content: [{ type: "tool_use", id: "b", name: "Bash", input: { command: "npx vitest run" } }] } },
+    { type: "assistant", message: { content: [{ type: "tool_use", id: "c", name: "Edit", input: { file_path: "/w/docs/CHANGELOG.md" } }] } },
+  ].map((l) => JSON.stringify(l)).join("\n"));
+  assert.equal(traceSignals(noted, { cwd: "/w", verifyCommands: ["vitest"] }).verifiedAfterEdit, false);
+  assert.equal(traceSignals(noted, { cwd: "/w", verifyCommands: ["vitest"], verifyIgnore: ["docs/**"] }).verifiedAfterEdit, true);
 });
 
 test("validate accepts reproducible tasks and rejects a defect that misses its target", () => {
@@ -343,6 +352,18 @@ test("a quota limit stops new attempts; resume adds rounds and refuses changed t
   } finally {
     await fs.writeFile(taskFile, original);
   }
+});
+
+test("an interrupted run stops the agent's process group it started", async () => {
+  await fs.rm(pidFile, { force: true });
+  const { spawn } = await import("node:child_process");
+  const runner = spawn(process.execPath, [CLI, "eval", "run", "--variant", "sleeper", "add-broken", "--repeat", "1", "--root", project], { cwd: project, env: { ...process.env, HOME: path.join(tmp, "home") }, stdio: "ignore", detached: true });
+  const deadline = Date.now() + 15000;
+  while (!existsSync(pidFile) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+  const orphan = Number(await fs.readFile(pidFile, "utf8"));
+  process.kill(-runner.pid, "SIGTERM");
+  await new Promise((r) => setTimeout(r, 3000));
+  assert.throws(() => process.kill(orphan, 0), "the agent's background child dies with the interrupted runner");
 });
 
 test("the work directory may not sit inside the project", async () => {

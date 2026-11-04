@@ -114,6 +114,11 @@ function warnIfTracked(ctx) {
   if (res.status === 1) console.warn(`! ${path.relative(ctx.root, ctx.out)} is not ignored by git; add it to .gitignore so traces stay local.`);
 }
 
+function signalsFor(ctx, parsed, cwd) {
+  const { verifyCommands, verifyIgnore, successClaims, loopThreshold } = ctx.suite;
+  return traceSignals(parsed, { cwd, verifyCommands, verifyIgnore, successClaims, loopThreshold });
+}
+
 function taskWorkspaceOptions(ctx, task, { inject }) {
   return {
     sourceRoot: ctx.root,
@@ -252,7 +257,7 @@ async function attempt(ctx, task, variant, rep, { runId, runDir, workRoot, keep 
     record.changed = diff.files;
     record.agentCommits = diff.commits;
     const changed = diff.files.map((f) => f.path);
-    record.signals = traceSignals(parsed, { cwd: dir, verifyCommands: ctx.suite.verifyCommands, successClaims: ctx.suite.successClaims, loopThreshold: ctx.suite.loopThreshold });
+    record.signals = signalsFor(ctx, parsed, dir);
     record.signals.outOfScope = task.scope ? changed.filter((f) => !matchesAny(f, task.scope)) : [];
     await applyGradeFiles(dir, gradeFileOptions(ctx, task));
     const graded = await gradeWorkspace({ dir, task, suite: ctx.suite, env, logDir, mode: "run", answer: parsed.answer ?? "", signals: record.signals, changed });
@@ -463,7 +468,10 @@ async function regrade(opts) {
       }
       await applyGradeFiles(dir, gradeFileOptions(ctx, task));
       const changed = (record.changed ?? []).map((f) => f.path);
-      const signals = { ...record.signals, outOfScope: task.scope ? changed.filter((f) => !matchesAny(f, task.scope)) : [] };
+      // Signals are part of grading: read them from the trace again with the current suite.
+      const parsed = parseTrace(await fs.readFile(path.join(attemptDir, "trace.jsonl"), "utf8").catch(() => ""));
+      const originalCwd = path.join(workRoot, meta.runId, `${record.task}-${record.attempt}`);
+      const signals = { ...signalsFor(ctx, parsed, originalCwd), outOfScope: task.scope ? changed.filter((f) => !matchesAny(f, task.scope)) : [] };
       const logDir = path.join(attemptDir, "grade");
       await fs.rm(path.join(attemptDir, "grade-before-regrade"), { recursive: true, force: true });
       await fs.rename(logDir, path.join(attemptDir, "grade-before-regrade")).catch(() => {});

@@ -51,6 +51,7 @@ function normalizeSuite(raw) {
     serve: raw.serve ?? null,
     untouched: raw.untouched ?? [],
     verifyCommands: raw.verifyCommands ?? DEFAULT_VERIFY,
+    verifyIgnore: raw.verifyIgnore ?? [],
     successClaims: raw.successClaims ?? DEFAULT_CLAIMS,
     loopThreshold: raw.loopThreshold ?? 8,
     agent: {

@@ -49,6 +49,7 @@ evals/
 | `untouched` | Globs no task may change; added to every task as the `untouched` grade item |
 | `agent` | `permissionMode`, `allowedTools`, `disallowedTools`, `budgetUsd` and `timeoutMin` per attempt |
 | `verifyCommands` | Regexes for shell commands that count as verification |
+| `verifyIgnore` | Globs whose edits do not call for another verification (notes, changelogs), e.g. `docs/**` |
 | `successClaims` | Regexes for a final answer that claims success |
 | `loopThreshold` | Edits to one file above which an attempt counts as looping (default 8) |
 

@@ -63,6 +63,29 @@ function killGroup(child, signal) {
 const TAIL = 64 * 1024;
 
 /**
+ * Process groups started by the runner that are still alive. Detached groups survive
+ * their parent, so an interrupted run (Ctrl-C, a stopped task) stops them itself.
+ */
+const live = new Set();
+let trapped = false;
+function track(child) {
+  live.add(child);
+  if (!trapped) {
+    trapped = true;
+    for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143], ["SIGHUP", 129]]) {
+      process.once(signal, () => {
+        for (const c of live) killGroup(c, "SIGTERM");
+        setTimeout(() => {
+          for (const c of live) killGroup(c, "SIGKILL");
+          process.exit(code);
+        }, 2000).unref();
+      });
+    }
+  }
+  child.once("exit", () => live.delete(child));
+}
+
+/**
  * Runs a process in its own process group. Output can go to files; the last 64 KiB of
  * each stream is kept in memory. On timeout the whole group gets SIGTERM, then SIGKILL.
  * When the main process exits, the rest of its group is stopped too, so background
@@ -74,6 +97,7 @@ export function runProcess(command, args, { cwd, env, timeoutMs, stdoutFile, std
     let child;
     try {
       child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+      if (child.pid) track(child);
     } catch (error) {
       resolve({ code: null, signal: null, timedOut: false, stdout: "", stderr: error.message, durationMs: 0, spawnError: error.code || error.message });
       return;
@@ -145,6 +169,7 @@ export function runShell(line, options) {
 export function startService(line, { cwd, env, logFile }) {
   const log = fs.createWriteStream(logFile);
   const child = spawn("/bin/sh", ["-c", line], { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+  if (child.pid) track(child);
   child.stdout.pipe(log, { end: false });
   child.stderr.pipe(log, { end: false });
   let exited = null;
