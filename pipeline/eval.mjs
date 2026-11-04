@@ -200,6 +200,7 @@ async function validate(opts) {
     registry[task.id] = { status: entry.status, hash: entry.hash, base: entry.base, checkedAt: entry.checkedAt };
     console.log(`${entry.status === "valid" ? "✓" : "✗"} ${task.id}${entry.note ? ` (${entry.note})` : ""}${issues.map((m) => `\n    - ${m}`).join("")}`);
   }
+  if (!opts.keep) await fs.rm(workRoot, { recursive: true, force: true });
   await writeJson(path.join(logRoot, "validate.json"), report);
   await writeJson(path.join(ctx.out, "validated.json"), registry);
   const invalid = report.filter((r) => r.status === "invalid").length;

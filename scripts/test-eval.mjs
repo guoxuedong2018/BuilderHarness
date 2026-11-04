@@ -104,7 +104,7 @@ before(async () => {
     { id: "extra", run: "node test/extra.test.mjs" },
     { id: "served", run: "node check-server.mjs", serve: true },
   ];
-  await write(path.join(evals, "tasks/add-broken/task.json"), JSON.stringify({ type: "injected-defect", split: "dev", prompt: "Sums are wrong: 2 + 3 shows -1.", inject: "inject.patch", restore: ["test/calc.test.mjs"], scope: ["calc.mjs", "test/**"], grade }, null, 2));
+  await write(path.join(evals, "tasks/add-broken/task.json"), JSON.stringify({ type: "injected-defect", split: "dev", prompt: "Sums are wrong: 2 + 3 shows -1.", inject: "inject.patch", restore: ["test"], scope: ["calc.mjs", "test/**"], grade }, null, 2));
   await write(path.join(evals, "tasks/add-broken/inject.patch"), inject);
   await write(path.join(evals, "tasks/no-repro/task.json"), JSON.stringify({ split: "dev", prompt: "x", inject: "inject.patch", grade }, null, 2));
   await write(path.join(evals, "tasks/no-repro/inject.patch"), harmless);
@@ -136,6 +136,11 @@ fs.writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));
 setTimeout(() => {}, 60000);
 `);
   await variant("asker", `result("This needs a migration. Please approve the plan first.");`);
+  await variant("breaker", `
+edit("calc.mjs", "a - b", "a + b");
+fs.writeFileSync(path.join(cwd, "server.mjs"), "process.exit(3);\\n");
+result("Fixed.");
+`);
 });
 
 after(async () => {
@@ -257,6 +262,12 @@ test("false claims, loops, rule answers, timeouts and comparison", async () => {
   const orphan = Number(await fs.readFile(pidFile, "utf8"));
   await new Promise((r) => setTimeout(r, 500));
   assert.throws(() => process.kill(orphan, 0), "a background process the agent started is stopped with it");
+
+  const broke = await read(runOf(cli("run", "--variant", "breaker", "add-broken", "--repeat", "1")), "add-broken");
+  assert.equal(broke.solved, false, "a service the agent broke fails the attempt, it is not an infrastructure error");
+  assert.equal(broke.infraError, null);
+  assert.deepEqual(broke.grade.find((g) => g.id === "served").status, "fail");
+  assert.match(broke.grade.find((g) => g.id === "served").detail, /service-exited/);
 
   const fixer = runOf(cli("run", "--variant", "fixer", "add-broken", "--repeat", "1"));
   const cmp = cli("compare", runOf(claimer), fixer, "--json");

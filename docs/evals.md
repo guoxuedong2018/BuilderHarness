@@ -75,8 +75,10 @@ evals/
 - `split` is `dev` or `holdout`. Develop the harness against `dev`; run `holdout`
   only at milestones so changes do not overfit the tasks.
 - `inject` usually breaks the source and removes the tests that would reveal the
-  defect; `restore` puts those test files back to their base content before
-  grading, and `hidden/` adds files that never existed at base.
+  defect; `restore` puts files or whole directories back to their base content
+  before grading (files the agent added stay), and `hidden/` then adds files that
+  never existed at base. Restoring the whole test directory also means edits the
+  agent made to existing tests cannot change the grade.
 - `scope` is optional; changes outside it are reported as `outOfScope`.
 
 Grade items, exactly one kind each:
@@ -90,8 +92,9 @@ Grade items, exactly one kind each:
 | `signal` | the process signal holds, e.g. `verifiedAfterEdit` |
 
 An attempt is solved when every item passes. An infrastructure failure (setup,
-service, workspace) is recorded as an error and counts as neither solved nor
-unsolved. Globs support `*`, `**` and `?`; a pattern without wildcards also covers
+a service address already in use, workspace) is recorded as an error and counts
+as neither solved nor unsolved. A service that exits or never answers after an
+agent ran is usually a build the agent broke, so the items that need it fail. Globs support `*`, `**` and `?`; a pattern without wildcards also covers
 everything below it.
 
 ### variant.json

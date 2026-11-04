@@ -133,15 +133,23 @@ export function workspaceDiff(dir, snapshot) {
 }
 
 /**
- * Puts the grader's files back: `restore` paths return to their base content, and the
- * task's hidden directory is copied over the workspace.
+ * Puts the grader's files back: `restore` paths (files or directories) return to their
+ * base content, then the task's hidden directory is copied over the workspace.
  */
 export async function applyGradeFiles(dir, { sourceRoot, base, restore = [], hiddenDir = null }) {
-  for (const p of restore) {
-    const res = git(sourceRoot, ["show", `${base}:${p}`], { encoding: "buffer", allowFail: true });
-    if (res.status !== 0) throw new Error(`restore path ${p} does not exist at ${base.slice(0, 12)}`);
-    await fs.mkdir(path.dirname(path.join(dir, p)), { recursive: true });
-    await fs.writeFile(path.join(dir, p), res.stdout);
+  let all = null;
+  for (const entry of restore) {
+    const p = entry.replace(/\/+$/, "");
+    const type = git(sourceRoot, ["cat-file", "-t", `${base}:${p}`], { allowFail: true }).stdout.trim();
+    if (!type) throw new Error(`restore path ${p} does not exist at ${base.slice(0, 12)}`);
+    // A directory restores every file it had at base; files the agent added stay.
+    all ??= type === "tree" ? listFilesAt(sourceRoot, base) : null;
+    const files = type === "tree" ? all.filter((f) => f.startsWith(`${p}/`)) : [p];
+    for (const file of files) {
+      const res = git(sourceRoot, ["show", `${base}:${file}`], { encoding: "buffer" });
+      await fs.mkdir(path.dirname(path.join(dir, file)), { recursive: true });
+      await fs.writeFile(path.join(dir, file), res.stdout);
+    }
   }
   if (hiddenDir) await overlay(hiddenDir, dir);
 }

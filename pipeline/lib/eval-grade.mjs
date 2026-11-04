@@ -39,6 +39,9 @@ export async function gradeWorkspace({ dir, task, suite, env, logDir, mode = "ru
   let setupDone = false;
   let infra = null;
   let up = null;
+  // After an agent, a service that exits or never answers is usually the agent's doing
+  // (a build it broke), so the items that need it fail. A busy address is not.
+  let serviceDown = null;
   try {
     for (const item of task.grade) {
       const kind = gradeKind(item);
@@ -66,11 +69,16 @@ export async function gradeWorkspace({ dir, task, suite, env, logDir, mode = "ru
           if (!suite.serve) infra = "grade item needs serve but the suite defines none";
           else {
             up = await bringUp(suite.serve, { dir, env, logDir });
-            if (up.error) infra = up.error;
+            if (up.error && mode === "run" && !up.error.startsWith("service-url-busy")) serviceDown = up.error;
+            else if (up.error) infra = up.error;
           }
         }
         if (infra) {
           results.push({ ...base, status: "error", detail: infra });
+          continue;
+        }
+        if (item.serve && serviceDown) {
+          results.push({ ...base, status: "fail", detail: serviceDown });
           continue;
         }
         const log = path.join(logDir, `${item.id}.log`);
