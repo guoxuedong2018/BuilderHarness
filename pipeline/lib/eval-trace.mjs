@@ -30,6 +30,7 @@ function pickInit(init) {
     plugins: names(init.plugins),
     agents: names(init.agents),
     slashCommands: Array.isArray(init.slash_commands) ? init.slash_commands.length : undefined,
+    memoryDir: init.memory_paths?.auto,
   };
 }
 
@@ -72,11 +73,28 @@ export function parseTrace(raw) {
   };
 }
 
+/**
+ * A failure of the host rather than of the agent: the model API refused the session
+ * (unsupported model, authentication, rate limit) before or while the agent worked.
+ * Such an attempt says nothing about the harness and is not graded.
+ */
+export function hostError(parsed, agent = {}) {
+  const r = parsed.result;
+  if (r && (r.terminal_reason === "api_error" || r.api_error_status)) {
+    return `host-api-error ${r.api_error_status ?? ""}: ${String(r.result ?? "").slice(0, 300)}`.replace("  ", " ");
+  }
+  if (!r && !agent.timedOut && agent.exitCode !== 0 && !parsed.steps.length) {
+    return `host-exited-without-result (exit ${agent.exitCode ?? agent.spawnError ?? "?"})`;
+  }
+  return null;
+}
+
 export function traceMetrics(parsed) {
   const r = parsed.result;
   const usage = r?.usage ?? {};
   return {
-    stopReason: r ? r.subtype ?? "unknown" : "no-result",
+    stopReason: r ? r.terminal_reason ?? r.subtype ?? "unknown" : "no-result",
+    subtype: r?.subtype ?? null,
     isError: r ? Boolean(r.is_error) : true,
     costUsd: typeof r?.total_cost_usd === "number" ? r.total_cost_usd : null,
     turns: r?.num_turns ?? null,

@@ -22,7 +22,7 @@ import { gradeWorkspace, solvedFrom } from "./lib/eval-grade.mjs";
 import { cleanEnv, hostStatus, runAgent } from "./lib/eval-host.mjs";
 import { compareMarkdown, compareSummaries, summarize, summaryMarkdown } from "./lib/eval-report.mjs";
 import { gradeKind, loadSuite, loadVariant, selectTasks, taskIssues } from "./lib/eval-suite.mjs";
-import { parseTrace, traceMetrics, traceSignals } from "./lib/eval-trace.mjs";
+import { hostError, parseTrace, traceMetrics, traceSignals } from "./lib/eval-trace.mjs";
 import { matchesAny, timestamp } from "./lib/eval-util.mjs";
 import { ancestorInstructions, applyGradeFiles, createWorkspace, listFilesAt, pathExistsAt, resolveCommit, workspaceDiff } from "./lib/eval-workspace.mjs";
 
@@ -227,6 +227,14 @@ async function attempt(ctx, task, variant, rep, { runId, runDir, workRoot, keep 
     record.trace = { events: parsed.events, malformed: parsed.malformed };
     record.answer = (parsed.answer ?? "").slice(0, 8000);
     await fs.writeFile(path.join(attemptDir, "answer.md"), parsed.answer ?? "");
+    record.memory = await collectMemory(parsed.init?.memoryDir, attemptDir, runId);
+    const failed = hostError(parsed, record.agent);
+    if (failed) {
+      record.hostError = true;
+      record.infraError = failed;
+      record.solved = null;
+      return record;
+    }
     const diff = workspaceDiff(dir, ws.snapshot);
     await fs.writeFile(path.join(attemptDir, "diff.patch"), diff.patch);
     record.changed = diff.files;
@@ -245,9 +253,27 @@ async function attempt(ctx, task, variant, rep, { runId, runDir, workRoot, keep 
     record.solved = null;
   } finally {
     if (!keep) await fs.rm(dir, { recursive: true, force: true });
+    await writeJson(path.join(attemptDir, "result.json"), record);
   }
-  await writeJson(path.join(attemptDir, "result.json"), record);
   return record;
+}
+
+/**
+ * Claude Code creates a project directory with an automatic-memory folder for every new
+ * working directory, even without session persistence. Memories the agent wrote are
+ * kept with the attempt; the directory itself is removed when its name carries this
+ * run's id, so a baseline does not leave dozens of empty projects behind.
+ */
+async function collectMemory(memoryDir, attemptDir, runId) {
+  if (!memoryDir) return null;
+  const projectDir = path.dirname(path.resolve(memoryDir));
+  if (path.dirname(projectDir) !== path.join(os.homedir(), ".claude", "projects") || !path.basename(projectDir).includes(runId)) {
+    return { dir: memoryDir, files: null, removed: false };
+  }
+  const files = await fs.readdir(memoryDir, { recursive: true }).catch(() => []);
+  if (files.length) await fs.cp(memoryDir, path.join(attemptDir, "memory"), { recursive: true });
+  await fs.rm(projectDir, { recursive: true, force: true });
+  return { files: files.length, removed: true };
 }
 
 async function run(opts) {
@@ -300,6 +326,13 @@ async function run(opts) {
       const record = await attempt(ctx, task, variant, rep, { runId, runDir, workRoot, keep: opts.keep });
       spent += record.metrics?.costUsd ?? 0;
       attempts.push(record);
+      if (record.hostError) {
+        // Every further attempt would fail the same way (unsupported model, login, limits).
+        meta.stoppedEarly = `host error on ${task.id} #${rep}: ${record.infraError}`;
+        console.log(`  ${record.infraError}\n  Stopping: fix the host and run again.`);
+        await writeJson(path.join(runDir, "summary.json"), summarize({ ...meta, finishedAt: null }, attempts));
+        break outer;
+      }
       const verdict = record.solved === null ? `error: ${record.infraError}` : record.solved ? "solved" : "unsolved";
       console.log(`  ${verdict} · $${(record.metrics?.costUsd ?? 0).toFixed(2)} · ${Math.round((record.agent?.wallMs ?? 0) / 1000)}s`);
       const summary = summarize({ ...meta, finishedAt: null }, attempts);

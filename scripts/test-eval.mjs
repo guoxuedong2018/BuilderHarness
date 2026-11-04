@@ -32,7 +32,7 @@ const write = async (file, text) => {
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, text);
 };
-const cli = (...args) => spawnSync(process.execPath, [CLI, "eval", ...args, "--root", project], { cwd: project, encoding: "utf8", env: { ...process.env, CLAUDECODE: "1" } });
+const cli = (...args) => spawnSync(process.execPath, [CLI, "eval", ...args, "--root", project], { cwd: project, encoding: "utf8", env: { ...process.env, CLAUDECODE: "1", HOME: path.join(tmp, "home") } });
 const freePort = () => new Promise((resolve) => {
   const server = net.createServer().listen(0, "127.0.0.1", () => {
     const { port } = server.address();
@@ -53,7 +53,10 @@ const toolResult = (id, isError = false) => out({ type: "user", message: { conte
 const edit = (file, from, to) => { const p = path.join(cwd, file); const id = tool("Edit", { file_path: p, old_string: from, new_string: to }); fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(from, to)); toolResult(id); };
 const bash = (command) => { const id = tool("Bash", { command }); let failed = false; try { execSync(command, { cwd, stdio: "ignore" }); } catch { failed = true; } toolResult(id, failed); };
 const result = (text, extra = {}) => out({ type: "result", subtype: "success", is_error: false, result: text, total_cost_usd: 0.25, num_turns: 4, duration_ms: 1000, usage: { input_tokens: 10, output_tokens: 5 }, permission_denials: [], ...extra });
-out({ type: "system", subtype: "init", model: "fake-model", permissionMode: "acceptEdits", tools: ["Read", "Edit", "Bash"], mcp_servers: [] });
+// Like Claude Code: an automatic-memory folder for the new working directory.
+const memoryDir = path.join(process.env.HOME, ".claude", "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"), "memory");
+fs.mkdirSync(memoryDir, { recursive: true });
+out({ type: "system", subtype: "init", model: "fake-model", permissionMode: "acceptEdits", tools: ["Read", "Edit", "Bash"], mcp_servers: [], memory_paths: { auto: memoryDir + "/" } });
 ${body}
 `;
 }
@@ -135,7 +138,13 @@ const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { s
 fs.writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));
 setTimeout(() => {}, 60000);
 `);
-  await variant("asker", `result("This needs a migration. Please approve the plan first.");`);
+  await variant("asker", `fs.writeFileSync(path.join(memoryDir, "note.md"), "remember the migration rule");
+result("This needs a migration. Please approve the plan first.");`);
+  await variant("apierror", `
+out({ type: "assistant", message: { model: "<synthetic>", content: [{ type: "text", text: "API Error: 400 this version does not support the model" }] }, is_api_error_message: true });
+out({ type: "result", subtype: "success", is_error: true, terminal_reason: "api_error", api_error_status: 400, result: "API Error: 400 this version does not support the model", total_cost_usd: 0.001, num_turns: 1, permission_denials: [] });
+process.exit(1);
+`);
   await variant("breaker", `
 edit("calc.mjs", "a - b", "a + b");
 fs.writeFileSync(path.join(cwd, "server.mjs"), "process.exit(3);\\n");
@@ -231,6 +240,9 @@ test("run solves, grades with restored tests and a service, and leaves the proje
   assert.equal(result.cloned.node_modules !== undefined, true);
   assert.match(await fs.readFile(path.join(project, ".builderharness/evals", runId, "add-broken/1/diff.patch"), "utf8"), /\+  return a \+ b;/);
   assert.equal(existsSync(path.join(tmp, "work", runId)), false, "workspaces are removed");
+  assert.deepEqual(result.memory, { files: 0, removed: true });
+  const projects = await fs.readdir(path.join(tmp, "home/.claude/projects")).catch(() => []);
+  assert.ok(!projects.some((d) => d.includes(runId)), "empty memory folders of the run are removed");
   assert.equal(sh(project, "git", ["status", "--porcelain"]), statusBefore);
   assert.equal(sh(project, "git", ["rev-parse", "HEAD"]), headBefore);
   return runId;
@@ -250,8 +262,20 @@ test("false claims, loops, rule answers, timeouts and comparison", async () => {
   assert.equal(looper.signals.looping, true);
   assert.equal(looper.signals.verifiedAfterEdit, false);
 
-  const asked = await read(runOf(cli("run", "--variant", "asker", "rule", "--repeat", "1")), "rule");
+  const askerRun = runOf(cli("run", "--variant", "asker", "rule", "--repeat", "1"));
+  const asked = await read(askerRun, "rule");
   assert.equal(asked.solved, true);
+  assert.equal(asked.memory.files, 1, "memories the agent wrote are kept with the attempt");
+  assert.match(await fs.readFile(path.join(project, ".builderharness/evals", askerRun, "rule/1/memory/note.md"), "utf8"), /migration rule/);
+
+  const apiRun = cli("run", "--variant", "apierror", "add-broken", "rule", "--repeat", "2");
+  assert.equal(apiRun.status, 0, apiRun.stderr);
+  const apiSummary = JSON.parse(await fs.readFile(path.join(project, ".builderharness/evals", runOf(apiRun), "summary.json"), "utf8"));
+  assert.equal(apiSummary.totals.attempts, 1, "a host error stops the run instead of repeating it");
+  assert.match(apiSummary.stoppedEarly, /host error on add-broken #1: host-api-error 400/);
+  const apiFailed = await read(runOf(apiRun), "add-broken");
+  assert.equal(apiFailed.solved, null);
+  assert.equal(apiFailed.grade, undefined, "a host error is not graded");
   const ignored = await read(runOf(cli("run", "--variant", "claimer", "rule", "--repeat", "1")), "rule");
   assert.equal(ignored.solved, false);
 

@@ -130,6 +130,7 @@ cloned directories. The agent can use git but cannot see what was injected. Unde
 - `grade/`: one log per grade item, setup and service
 - `result.json`: solved, grade items, cost, turns, duration, tokens, stop reason,
   the host's init summary (model, tools, skills, MCP servers) and process signals
+- `memory/`: automatic memories the agent wrote during the attempt, if any
 
 `summary.json` and `summary.md` aggregate per task: solve rate over attempts,
 unstable tasks (some attempts solved, some not), median cost, time and turns, and
@@ -175,6 +176,27 @@ need, and run evals on a machine where that is acceptable.
 Workspace trust and permission behaviour in print mode can differ from interactive
 sessions. Run a single pilot attempt with `--keep`, read its trace and `init`
 summary, and record what you find for your project before sizing a baseline.
+
+Observed with Claude Code 2.1.220 in print mode (first pilot, 2026-11-04):
+
+- No workspace-trust prompt: the session starts in the new directory at once.
+- `init` lists every built-in tool (scheduling, workflows, web fetch and search
+  among them); only `allowedTools` run without a prompt, everything else is refused
+  and shows up as a denial. With `--setting-sources project --strict-mcp-config`
+  there were no MCP servers and no plugins; skills were the project's own plus the
+  built-in ones.
+- A model the CLI version does not support fails at once with an API 400 ("version
+  … or newer is required"). The `result` event still has `subtype: "success"`, with
+  `is_error: true`, `terminal_reason: "api_error"` and `api_error_status`. The
+  runner treats this, and a host that exits without any result, as a host error:
+  the attempt is not graded, counts as an infrastructure error and stops the run.
+  Update the CLI (`claude update`) and run again.
+- Even with `--no-session-persistence`, the CLI creates
+  `~/.claude/projects/<workspace path>/memory/` for each new workspace. The runner
+  copies any memories the agent wrote into the attempt's `memory/` folder and
+  removes that project directory when its name carries the run id.
+- The stream also carries `rate_limit_event` lines; they are kept in the trace and
+  otherwise ignored.
 
 Not part of `npm run check`: real host runs cost money and need a login. The
 runner's own tests (`npm run test:eval`) use fake agents.
