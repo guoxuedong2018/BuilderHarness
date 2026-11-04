@@ -347,14 +347,47 @@ test("a quota limit stops new attempts; resume adds rounds and refuses changed t
 
 test("the work directory may not sit inside the project", async () => {
   const suiteFile = path.join(project, "evals/suite.json");
-  const suite = JSON.parse(await fs.readFile(suiteFile, "utf8"));
-  await fs.writeFile(suiteFile, JSON.stringify({ ...suite, workDir: "tmp-work" }));
+  const original = await fs.readFile(suiteFile, "utf8");
+  await fs.writeFile(suiteFile, JSON.stringify({ ...JSON.parse(original), workDir: "tmp-work" }));
   try {
     const res = cli("validate", "add-broken");
     assert.equal(res.status, 1);
     assert.match(res.stderr, /inside the project/);
   } finally {
-    await fs.writeFile(suiteFile, JSON.stringify(suite));
+    await fs.writeFile(suiteFile, original);
+  }
+});
+
+test("a suite change makes validations stale; regrade applies a corrected grader to saved attempts", async () => {
+  const runOf = (res) => res.stdout.match(/Run: .*?([0-9]{8}-[0-9]{6}-[a-z]+)/)[1];
+  const runId = runOf(cli("run", "--variant", "fixer", "add-broken", "--repeat", "1"));
+  const resultFile = path.join(project, ".builderharness/evals", runId, "add-broken/1/result.json");
+  assert.equal(JSON.parse(await fs.readFile(resultFile, "utf8")).solved, true);
+
+  // A stricter suite: the fix in calc.mjs is now off limits.
+  const suiteFile = path.join(project, "evals/suite.json");
+  const original = await fs.readFile(suiteFile, "utf8");
+  await fs.writeFile(suiteFile, JSON.stringify({ ...JSON.parse(original), untouched: ["package.json", "calc.mjs"] }, null, 2));
+  try {
+    assert.match(cli("list").stdout, /add-broken\s+dev\s+injected-defect\s+valid \(stale\)/);
+    const refused = cli("regrade", runId);
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /without a current passing validation: add-broken/);
+
+    assert.equal(cli("validate", "add-broken").status, 0);
+    const res = cli("regrade", runId);
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /add-broken #1: solved → unsolved/);
+    const record = JSON.parse(await fs.readFile(resultFile, "utf8"));
+    assert.equal(record.solved, false);
+    assert.equal(record.previous[0].solved, true);
+    assert.deepEqual(record.grade.find((g) => g.id === "untouched").detail, ["calc.mjs"]);
+    assert.ok(existsSync(path.join(project, ".builderharness/evals", runId, "add-broken/1/grade-before-regrade/target.log")));
+    const summary = JSON.parse(await fs.readFile(path.join(project, ".builderharness/evals", runId, "summary.json"), "utf8"));
+    assert.equal(summary.tasks["add-broken"].solved, 0);
+    assert.equal(summary.regradedAt.length, 1);
+  } finally {
+    await fs.writeFile(suiteFile, original);
   }
 });
 

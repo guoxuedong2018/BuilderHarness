@@ -145,6 +145,15 @@ raised to add rounds. Attempts that ended in an infrastructure or host error run
 again; the others are kept. Resuming is refused when a task or the variant changed
 since the run started, so one run never mixes two versions of the harness.
 
+`regrade <runId>` fixes a wrong grader without calling the agent again. After a
+task or `suite.json` changes (a task's hash covers the suite, so its validation
+becomes stale until `validate` passes again), each graded attempt's workspace is
+rebuilt from the snapshot plus its `diff.patch` and graded with the current
+definitions. The earlier verdict stays in `result.json` under `previous`, the old
+logs in `grade-before-regrade/`, and `--resume` then continues under the new
+definitions. Regrade every attempt of a run, never a chosen few, and record why
+the grader changed.
+
 Process signals, read from the trace (heuristics; check the trace before acting):
 
 | Signal | Meaning |

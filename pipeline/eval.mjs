@@ -7,6 +7,7 @@
  *   builderharness eval run --variant <name> [task ...] [--split dev] [--repeat 3]
  *                          [--max-total-usd N] [--max-quota 0.85] [--keep] [--dry-run] [--skip-validate]
  *   builderharness eval run --resume <runId> [--repeat N] [...]
+ *   builderharness eval regrade <runId>        grade saved attempts again after a grader fix
  *   builderharness eval compare <runA> <runB>
  *
  * Options for every command: --root <project>, --evals <dir> (default evals),
@@ -52,6 +53,7 @@ function help(code = 0) {
   builderharness eval run --variant <name> [task ...] [--split dev] [--repeat 3]
                          [--max-total-usd N] [--max-quota 0.85] [--keep] [--dry-run] [--skip-validate]
   builderharness eval run --resume <runId> [--repeat N]   continue a run, e.g. with more rounds
+  builderharness eval regrade <runId>                    grade saved attempts again after a grader fix
   builderharness eval compare <runA> <runB>
 
 Options: --root <project>  --evals <dir> (default evals)  --out <dir> (default .builderharness/evals)
@@ -87,6 +89,11 @@ async function taskHash(dir) {
   };
   await walk(dir);
   return hash.digest("hex").slice(0, 16);
+}
+
+/** A task's hash covers the suite too: setup, service, untouched paths and defaults grade it as well. */
+async function taskHashFor(ctx, task) {
+  return createHash("sha256").update(await taskHash(task.dir)).update(ctx.suiteHash).digest("hex").slice(0, 16);
 }
 
 function workRootFor(ctx) {
@@ -125,6 +132,7 @@ async function load(opts) {
   const root = path.resolve(opts.root ?? PROJECT_ROOT);
   const ctx = await loadSuite(root, opts.evals ?? "evals");
   ctx.out = path.resolve(root, opts.out ?? ".builderharness/evals");
+  ctx.suiteHash = createHash("sha256").update(await fs.readFile(path.join(ctx.dir, "suite.json"))).digest("hex");
   for (const task of ctx.tasks) {
     try {
       task.baseSha = task.base ? resolveCommit(root, task.base) : null;
@@ -171,7 +179,7 @@ async function validate(opts) {
         for (const glob of item.unchanged) if (!files.some((f) => matchesAny(f, [glob]))) issues.push(`grade ${item.id}: ${glob} matches no file at base`);
       }
     }
-    const entry = { task: task.id, split: task.split, type: task.type ?? null, base: task.baseSha, hash: await taskHash(task.dir), issues, states: {} };
+    const entry = { task: task.id, split: task.split, type: task.type ?? null, base: task.baseSha, hash: await taskHashFor(ctx, task), issues, states: {} };
     if (!issues.length) {
       process.stdout.write(`… ${task.id}: problem state\n`);
       try {
@@ -328,7 +336,7 @@ async function run(opts) {
   const hashes = { variant: await taskHash(variant.dir), tasks: {} };
   const notValid = [];
   for (const task of tasks) {
-    hashes.tasks[task.id] = await taskHash(task.dir);
+    hashes.tasks[task.id] = await taskHashFor(ctx, task);
     const entry = registry[task.id];
     if (!entry || entry.status !== "valid" || entry.hash !== hashes.tasks[task.id] || entry.base !== task.baseSha) notValid.push(task.id);
   }
@@ -414,6 +422,86 @@ async function run(opts) {
   console.log(`\n${md}\nRun: ${path.relative(process.cwd(), runDir) || runDir}`);
 }
 
+/**
+ * Grades a run's attempts again with the current task definitions, without calling the
+ * agent: each workspace is rebuilt from the snapshot and the attempt's diff.patch. Used
+ * when a grader turns out to be wrong. Attempts that ended in an error are left for
+ * --resume. The previous verdict stays in the result under `previous`.
+ */
+async function regrade(opts) {
+  if (opts.positional.length !== 1) throw new Error("regrade needs one run: builderharness eval regrade <runId>");
+  const ctx = await load(opts);
+  const { dir: runDir, run: meta, attempts } = await readRunDir(ctx, opts.positional[0]);
+  const variant = await loadVariant(ctx.dir, meta.variant);
+  const hashes = { variant: await taskHash(variant.dir), tasks: {} };
+  if (meta.hashes && meta.hashes.variant !== hashes.variant) throw new Error(`variant ${variant.name} changed since the run; its workspaces cannot be rebuilt the same way`);
+  const tasks = selectTasks(ctx.tasks, { ids: meta.plan.tasks });
+  const registry = await readJson(path.join(ctx.out, "validated.json"), {});
+  const notValid = [];
+  for (const task of tasks) {
+    hashes.tasks[task.id] = await taskHashFor(ctx, task);
+    const entry = registry[task.id];
+    if (!entry || entry.status !== "valid" || entry.hash !== hashes.tasks[task.id] || entry.base !== task.baseSha) notValid.push(task.id);
+  }
+  if (notValid.length && !opts["skip-validate"]) throw new Error(`task(s) without a current passing validation: ${notValid.join(", ")}. Run builderharness eval validate first.`);
+  const workRoot = workRootFor(ctx);
+  checkWorkRoot(ctx, workRoot);
+  const env = cleanEnv(process.env, ctx.suite.env);
+  const regradedAt = new Date().toISOString();
+  for (const record of attempts.sort((x, y) => x.attempt - y.attempt || x.task.localeCompare(y.task))) {
+    if (record.solved === null) continue;
+    const task = tasks.find((t) => t.id === record.task);
+    const attemptDir = path.join(runDir, record.task, String(record.attempt));
+    const dir = path.join(workRoot, meta.runId, `regrade-${record.task}-${record.attempt}`);
+    await fs.rm(dir, { recursive: true, force: true });
+    try {
+      await createWorkspace({ ...taskWorkspaceOptions(ctx, task, { inject: true }), variant, dir });
+      const patch = path.join(attemptDir, "diff.patch");
+      if ((await fs.stat(patch)).size > 0) {
+        const applied = spawnSync("git", ["apply", "--binary", "--whitespace=nowarn", patch], { cwd: dir, encoding: "utf8" });
+        if (applied.status !== 0) throw new Error(`diff.patch does not apply to the rebuilt snapshot: ${applied.stderr.trim()}`);
+      }
+      await applyGradeFiles(dir, gradeFileOptions(ctx, task));
+      const changed = (record.changed ?? []).map((f) => f.path);
+      const signals = { ...record.signals, outOfScope: task.scope ? changed.filter((f) => !matchesAny(f, task.scope)) : [] };
+      const logDir = path.join(attemptDir, "grade");
+      await fs.rm(path.join(attemptDir, "grade-before-regrade"), { recursive: true, force: true });
+      await fs.rename(logDir, path.join(attemptDir, "grade-before-regrade")).catch(() => {});
+      await fs.mkdir(logDir, { recursive: true });
+      const answer = await fs.readFile(path.join(attemptDir, "answer.md"), "utf8").catch(() => record.answer ?? "");
+      const graded = await gradeWorkspace({ dir, task, suite: ctx.suite, env, logDir, mode: "run", answer, signals, changed });
+      const before = { solved: record.solved, falseClaim: record.falseClaim, grade: record.grade.map(({ id, status }) => ({ id, status })) };
+      record.previous = [...(record.previous ?? []), { ...before, until: regradedAt }];
+      record.signals = signals;
+      record.grade = graded.items;
+      record.infraError = graded.infraError ?? null;
+      record.solved = record.infraError ? null : solvedFrom(graded.items);
+      record.falseClaim = record.solved === false && signals.claimedSuccess;
+      const flip = before.solved === record.solved ? "unchanged" : `${before.solved ? "solved" : "unsolved"} → ${record.solved === null ? "error" : record.solved ? "solved" : "unsolved"}`;
+      console.log(`${record.task} #${record.attempt}: ${flip}`);
+    } catch (error) {
+      console.log(`${record.task} #${record.attempt}: not regraded (${error.message})`);
+      continue;
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+    await writeJson(path.join(attemptDir, "result.json"), record);
+  }
+  await fs.rm(path.join(workRoot, meta.runId), { recursive: true, force: true });
+  const newMeta = { ...meta, regradedAt: [...(meta.regradedAt ?? []), regradedAt] };
+  delete newMeta.plan;
+  delete newMeta.hashes;
+  await writeJson(path.join(runDir, "run.json"), { ...newMeta, plan: meta.plan, hashes });
+  const index = (id) => tasks.findIndex((t) => t.id === id);
+  const ordered = attempts.sort((x, y) => x.attempt - y.attempt || index(x.task) - index(y.task));
+  const finishedAt = (await readJson(path.join(runDir, "summary.json"), {})).finishedAt ?? null;
+  const summary = summarize({ ...newMeta, finishedAt }, ordered);
+  await writeJson(path.join(runDir, "summary.json"), summary);
+  const md = summaryMarkdown(summary);
+  await fs.writeFile(path.join(runDir, "summary.md"), md);
+  console.log(`\n${md}`);
+}
+
 async function resolveRun(ctx, ref) {
   const candidates = [path.resolve(ref), path.join(ctx.out, ref)];
   for (const dir of candidates) {
@@ -436,7 +524,7 @@ async function list(opts) {
   const registry = await readJson(path.join(ctx.out, "validated.json"), {});
   for (const task of ctx.tasks) {
     const entry = registry[task.id];
-    const current = entry && entry.hash === (await taskHash(task.dir)) && entry.base === task.baseSha;
+    const current = entry && entry.hash === (await taskHashFor(ctx, task)) && entry.base === task.baseSha;
     console.log(`${task.id.padEnd(32)} ${task.split.padEnd(8)} ${(task.type ?? "").padEnd(18)} ${entry ? `${entry.status}${current ? "" : " (stale)"}` : "not validated"}`);
   }
   const runs = (await fs.readdir(ctx.out, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory() && !e.name.startsWith("validate-")).map((e) => e.name).sort();
@@ -452,7 +540,7 @@ const { command, opts } = (() => {
   }
 })();
 if (!command || command === "--help" || command === "-h" || command === "help") help();
-const commands = { validate, run, compare, list };
+const commands = { validate, run, regrade, compare, list };
 if (!commands[command]) {
   console.error(`Unknown eval command: ${command}`);
   help(1);
