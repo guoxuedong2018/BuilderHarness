@@ -21,6 +21,7 @@ const PIPELINE_DIR = path.join(KIT_ROOT, "pipeline");
 const COMMANDS = {
   init: "init.mjs",
   context: "context.mjs",
+  eval: "eval.mjs",
   kb: "kb.mjs",
   review: "review.mjs",
   prd: "prd.mjs",
@@ -52,6 +53,7 @@ Usage:
 Commands:
   init                     Connect the existing agent (use --scaffold for full templates)
   context                  Read bounded task evidence, decisions and verification entries
+  eval                     Validate, run and compare agent evals on the project's own tasks
   kb                       Content workspace CLI (status / shoot / ack / check / new …)
   review                   Review comments CLI (open / resolve / reply …)
   prd                      Build and publish a PRD from a feature spec

@@ -7,6 +7,7 @@
 - Review goals, constraints, historical premises and alternatives before process sizing; record meaningful confirmed decisions and actual verification limits.
 - Base CLI runtime dependencies are empty. Optional @builderharness/browser supplies browser dependencies while existing import paths remain.
 - Added preservation, recovery, package-install and explicit authenticated host acceptance checks. See docs/migration-0.9.md and the feature acceptance record for actual results.
+- Added `builderharness eval validate / run / compare / list`: repeatable agent evals on a host project's own tasks, with injected defects, hidden tests, isolated workspaces, stream-json traces, process signals and per-run budgets. See docs/evals.md.
 
 ## 0.8.0 — 2026-10-23
 
