@@ -15,11 +15,11 @@
  * 和多张配图，Markdown 表格全部表达不了；在线文档也不渲染 Markdown 里的 Mermaid 源码。
  *
  * 用法：
- *   npx builderharness export-frs-prd 09071618_EVAL_CASE_BULK_VISIBILITY
+ *   npx builderharness export-frs-prd <KEY>
  *   npx builderharness export-frs-prd <KEY> --images docs/prd/<KEY>/images.json
  *   npx builderharness export-frs-prd <KEY> --scope delta
  *
- * `--scope delta` 只出需要研发迭代的功能点（`origin` 为 new / online-hardened），
+ * `--scope delta` 只出需要研发迭代的功能点（`origin` 为 new / online-page-new / online-hardened），
  * 线上已有且本期不改的字段整条不渲染。这是「精简 PRD」的唯一正当做法——收窄的是
  * 功能范围，章节结构、四类规则与真源都不变；手写一份摘要发出去，下次迭代就对不上了。
  *
@@ -28,7 +28,7 @@
  *   preview.md    本地评审用的降级预览，不用于发布
  *   shots.json    截图配方，交给 scripts/capture-shots.mjs
  *
- * 发布链路见 .agent/skillsbuilderharness prd/SKILL.md，不要手动拼命令。
+ * 发布链路见 .agent/skills/prd-publish/SKILL.md，不要手动拼命令。
  */
 
 import { promises as fs } from "node:fs";
@@ -43,6 +43,7 @@ import {
   SHOT_WIDTH_PT,
   TABLE_COL_WIDTHS,
   blank,
+  codeParagraph,
   heading,
   image,
   listItem,
@@ -66,14 +67,41 @@ const RULE_SECTIONS = [
   { field: "permission", label: "权限规则：", bg: PERM_BG },
 ];
 
-/** 研发迭代范围：本期新增 + 线上已有但本期改过的。`online` 是照搬现状，不进 delta。 */
-const DELTA_ORIGINS = new Set(["new", "online-hardened"]);
+/** 研发迭代范围：本期新增（新页面 / 已有页面上）+ 线上已有但本期改过的。`online` 是照搬现状，不进 delta。 */
+const DELTA_ORIGINS = new Set(["new", "online-page-new", "online-hardened"]);
 
-const FULL_LEGEND =
-  "功能点标题后的标签含义：**线上已有**＝新平台已有、本期按现状落地；**线上已有 · 本期加固**＝已有字段，但本期改了交互 / 校验 / 说明；**本期新增**＝线上没有（或只有残缺形态）。";
+/** 图例一个标签一条：长句挤在一段里不好扫，读者在已发布文档里会自己拆成列表 */
+const FULL_LEGEND = [
+  "功能点标题后的标签含义：",
+  "**线上已有**＝线上已有、本期按现状落地；",
+  "**线上已有 · 本期加固**＝已有字段，但本期改了交互 / 校验 / 说明；",
+  "**已有页面 · 本期新增**＝页面线上已有，这块功能是新加的（新页签、新步骤、新区块）；",
+  "**本期新增**＝新页面、新模块，或线上没有的数据与能力。",
+];
 
-const DELTA_LEGEND =
-  "本篇只列**本期需要研发迭代**的功能点：**本期新增**＝线上没有（或只有残缺形态）；**线上已有 · 本期加固**＝已有字段，本期改了交互 / 校验 / 说明，按下面的规则实现即可，不要当成全新字段重做。线上已有且本期不改的字段按现状实现，完整字段清单见 FRS 件套。";
+const DELTA_LEGEND = [
+  "本篇只列**本期需要研发迭代**的功能点：",
+  "**本期新增**＝新页面、新模块，或线上没有的数据与能力；",
+  "**已有页面 · 本期新增**＝页面线上已有，在上面加这块功能；",
+  "**线上已有 · 本期加固**＝已有字段，本期改了交互 / 校验 / 说明，按下面的规则实现即可，不要当成全新字段重做。",
+  "线上已有且本期不改的字段按现状实现，完整字段清单见 FRS 件套。",
+];
+
+/** 图例：总起一段，下面一个标签一条 */
+function legendBlocks(scope) {
+  const [lead, ...items] = scope === "delta" ? DELTA_LEGEND : FULL_LEGEND;
+  const listId = newListId();
+  return [p(lead), ...items.map((line) => listItem(line, { listId }))];
+}
+
+/** 需求背景的一条：字符串，或 `{ text, children }`（下面再分子条） */
+function backgroundItems(lines, listId) {
+  return (lines ?? []).flatMap((line) =>
+    typeof line === "string"
+      ? [listItem(line, { listId, level: 1 })]
+      : [listItem(line.text, { listId, level: 1 }), ...(line.children ?? []).map((c) => listItem(c, { listId, level: 2 }))],
+  );
+}
 
 // ---------------------------------------------------------------- 正文构造
 
@@ -96,13 +124,9 @@ export function buildFragment(frs, flowMarkdown, { prototypeUrl, images, warning
   const bgList = newListId();
   const bold = { bold: true };
   blocks.push(listItem("**解决什么问题：**", { listId: bgList, textStyle: bold }));
-  for (const line of frs.background?.problem ?? []) {
-    blocks.push(listItem(line, { listId: bgList, level: 1 }));
-  }
+  blocks.push(...backgroundItems(frs.background?.problem, bgList));
   blocks.push(listItem("**如何解决：**", { listId: bgList, textStyle: bold }));
-  for (const line of frs.background?.solution ?? []) {
-    blocks.push(listItem(line, { listId: bgList, level: 1 }));
-  }
+  blocks.push(...backgroundItems(frs.background?.solution, bgList));
 
   if (prototypeUrl) blocks.push(p(`原型地址：[${prototypeUrl}](${prototypeUrl})`));
 
@@ -110,7 +134,7 @@ export function buildFragment(frs, flowMarkdown, { prototypeUrl, images, warning
   blocks.push(...markdownToBlocks(flowMarkdown));
 
   blocks.push(heading(3, "功能点规则描述"));
-  blocks.push(p(scope === "delta" ? DELTA_LEGEND : FULL_LEGEND));
+  blocks.push(...legendBlocks(scope));
   blocks.push(buildSpecTable(frs.spec ?? [], frs.shots ?? {}, images, warnings));
 
   return blocks;
@@ -123,13 +147,9 @@ export function buildBody(frs, flowMarkdown, { prototypeUrl, images, warnings = 
   const bgList = newListId();
   const bold = { bold: true };
   blocks.push(listItem("**解决什么问题：**", { listId: bgList, textStyle: bold }));
-  for (const line of frs.background?.problem ?? []) {
-    blocks.push(listItem(line, { listId: bgList, level: 1 }));
-  }
+  blocks.push(...backgroundItems(frs.background?.problem, bgList));
   blocks.push(listItem("**如何解决：**", { listId: bgList, textStyle: bold }));
-  for (const line of frs.background?.solution ?? []) {
-    blocks.push(listItem(line, { listId: bgList, level: 1 }));
-  }
+  blocks.push(...backgroundItems(frs.background?.solution, bgList));
 
   blocks.push(heading(2, "需求描述"));
   if (prototypeUrl) blocks.push(p(`原型地址：[${prototypeUrl}](${prototypeUrl})`));
@@ -138,9 +158,9 @@ export function buildBody(frs, flowMarkdown, { prototypeUrl, images, warnings = 
   blocks.push(...markdownToBlocks(flowMarkdown));
 
   blocks.push(heading(3, "功能点规则描述"));
-  // 每个功能点标题后的括号标签从 FRS.point.origin 来，三种取值见 FRS.originLegend。
+  // 每个功能点标题后的括号标签从 FRS.point.origin 来，四种取值见 originLabel()。
   // 研发读 PRD 时要先分清「照搬线上」和「本期改了什么」，否则会把加固当成全新字段重做。
-  blocks.push(p(scope === "delta" ? DELTA_LEGEND : FULL_LEGEND));
+  blocks.push(...legendBlocks(scope));
   blocks.push(buildSpecTable(frs.spec ?? [], frs.shots ?? {}, images, warnings));
 
   return blocks;
@@ -158,8 +178,10 @@ function buildSpecTable(spec, shotDefs, images, warnings) {
   for (const group of spec) {
     rows.push(
       tr([
-        tc([p(group.group)]),
-        tc((group.shots ?? []).map((key) => shotNode(key, shotDefs, images, SHOT_WIDTH_PT, null, warnings))),
+        // 分组名用五级标题：长文档靠目录跳到某一页
+        tc([heading(5, group.group)]),
+        // 参考图是截图配方的 key；人在已发布文档参考图格里插的图同步回来写 { image, width, height }，原样放回
+        tc((group.shots ?? []).map((key) => (key?.image ? image({ imageId: key.image, width: key.width, height: key.height }) : shotNode(key, shotDefs, images, SHOT_WIDTH_PT, null, warnings)))),
         tc(ruleCell(group.points ?? [], shotDefs, images, warnings)),
       ]),
     );
@@ -225,7 +247,7 @@ function referencedShots(spec) {
     for (const child of rule.children ?? []) walk(child);
   };
   for (const group of spec) {
-    for (const key of group.shots ?? []) keys.add(key);
+    for (const key of group.shots ?? []) if (typeof key === "string") keys.add(key);
     for (const point of group.points ?? []) {
       for (const section of RULE_SECTIONS) {
         for (const rule of point[section.field] ?? []) walk(rule);
@@ -238,6 +260,7 @@ function referencedShots(spec) {
 function originLabel(origin) {
   if (origin === "online") return "线上已有";
   if (origin === "online-hardened") return "线上已有 · 本期加固";
+  if (origin === "online-page-new") return "已有页面 · 本期新增";
   if (origin === "new") return "本期新增";
   return "";
 }
@@ -275,6 +298,10 @@ function ruleNodes(rule, opts, shotDefs, images, warnings) {
   if (rule.shot) {
     return [shotNode(rule.shot, shotDefs, images, INLINE_SHOT_WIDTH_PT, opts, warnings)];
   }
+  // 结构化的示例（请求体、证据格式）用代码块，比在一句话里列字段好读；不编号，跟在它说明的那条下面
+  if (rule.code) return [codeParagraph(rule.code, rule.lang)];
+  // 人在已发布文档里插的图：同步回 FRS 时记它的 imageId 与尺寸，照原样放回，不换成截图
+  if (rule.image) return [image({ imageId: rule.image, width: rule.width, height: rule.height })];
 
   const nodes = [listItem(rule.text ?? "", opts)];
   for (const child of rule.children ?? []) {
@@ -345,29 +372,24 @@ function buildPreview(frs, flowMarkdown, { prototypeUrl, scope = "all" }) {
   const out = [`# 【PRD】${frs.title}`, "", "## 需求背景", ""];
 
   out.push("1. **解决什么问题：**");
-  for (const line of frs.background?.problem ?? []) out.push(`    1. ${line}`);
+  const bgLines = (lines) => (lines ?? []).flatMap((l) => (typeof l === "string" ? [`    1. ${l}`] : [`    1. ${l.text}`, ...(l.children ?? []).map((c) => `        1. ${c}`)]));
+  out.push(...bgLines(frs.background?.problem));
   out.push("2. **如何解决：**");
-  for (const line of frs.background?.solution ?? []) out.push(`    1. ${line}`);
+  out.push(...bgLines(frs.background?.solution));
 
   out.push("", "## 需求描述", "");
   if (prototypeUrl) out.push(`原型地址：${prototypeUrl}`, "");
   out.push("### 方案设计", "", flowMarkdown.trim(), "", "### 功能点规则描述", "");
-  out.push(scope === "delta" ? DELTA_LEGEND : FULL_LEGEND, "");
+  const [legendLead, ...legendItems] = scope === "delta" ? DELTA_LEGEND : FULL_LEGEND;
+  out.push(legendLead, "", ...legendItems.map((l) => `1. ${l}`), "");
 
   for (const group of frs.spec ?? []) {
     out.push(`#### ${group.group}　\`${group.route}\``, "");
-    const shots = (group.shots ?? []).join("、");
+    const shots = (group.shots ?? []).map((key) => (typeof key === "string" ? key : "[图]")).join("、");
     if (shots) out.push(`> 参考图：${shots}`, "");
     for (const point of group.points ?? []) {
       if (point.name) {
-        const tag =
-          point.origin === "online"
-            ? "线上已有"
-            : point.origin === "online-hardened"
-              ? "线上已有 · 本期加固"
-              : point.origin === "new"
-                ? "本期新增"
-                : "";
+        const tag = originLabel(point.origin);
         out.push(tag ? `**${point.name}**（${tag}）` : `**${point.name}**`, "");
       }
       for (const section of RULE_SECTIONS) {
@@ -387,6 +409,8 @@ function buildPreview(frs, flowMarkdown, { prototypeUrl, scope = "all" }) {
 function previewRule(rule, index, indent) {
   if (typeof rule === "string") return [`${indent}${index}. ${rule}`];
   if (rule.shot) return [`${indent}${index}. （参考图：${rule.shot}）`];
+  if (rule.image) return [`${indent}（已发布文档里插的图）`];
+  if (rule.code) return [`${indent}\`\`\`${rule.lang ?? ""}`, ...rule.code.split("\n").map((l) => `${indent}${l}`), `${indent}\`\`\``];
   const lines = [`${indent}${index}. ${rule.text ?? ""}`];
   (rule.children ?? []).forEach((child, i) =>
     lines.push(...previewRule(child, i + 1, `${indent}    `)),

@@ -2,7 +2,7 @@
  * JsonML 节点构造与 Markdown 子集转换。
  *
  * 节点形状逐一对照线上 PRD 文档 `word +fetch-jsonml` 的读取结果，协议见
- * the docs-cli JsonML reference.。
+ * the docs-cli JsonML reference.
  * 读写同构：这里构造出来的就是读回来的形状。
  */
 
@@ -13,6 +13,8 @@ const LH_HEADING = 1.25;
 
 /** `{$变量}` 占位符的灰色 */
 export const VAR_COLOR = "#787b80";
+/** `“ⓘ 文案”` 的灰色：界面上 ⓘ 里的说明，和规则正文分开读 */
+export const COPY_COLOR = VAR_COLOR;
 /** `==重点==` 的飘色。刻意避开链接蓝，否则会被当成可点 */
 export const EMPHASIS_COLOR = "#d4380d";
 /** 权限规则的黄色底纹 */
@@ -48,7 +50,7 @@ export function newListId() {
 // ---------------------------------------------------------------- 行内
 
 const INLINE_PATTERN =
-  /(\*\*[^*]+\*\*)|(==[^=]+==)|(`[^`]+`)|(\[[^\]]*\]\([^)]+\))|(\{\$[^}]+\})|(【[^】]+】)|(「[^」]+」)/g;
+  /(\*\*[^*]+\*\*)|(==[^=]+==)|(`[^`]+`)|(\[[^\]]*\]\([^)]+\))|(\{\$[^}]+\})|(【[^】]+】)|(「[^」]+」)|(“[^”]+”)/g;
 
 /**
  * 把一行 Markdown 文本切成 text run 数组。
@@ -60,6 +62,7 @@ const INLINE_PATTERN =
  * - `「元素」` —— 字段、筛选项、页签、状态名
  *
  * 作者要强调整句话时用 `==重点==`，渲染成加粗飘色。
+ * 界面上 ⓘ 里的说明文案写在 `“…”` 里，连引号渲染成斜体灰字：读的人一眼分得清哪句是要照抄上界面的文案。
  * 记号内部会递归解析，所以 `【选择全部 {$总数} 条】` 里的变量仍然是灰的。
  *
  * @param {string} raw
@@ -93,6 +96,11 @@ export function inlines(raw, base = {}) {
       });
     } else if (token.startsWith("{$")) {
       push(token, { color: VAR_COLOR });
+    } else if (token.startsWith("“")) {
+      const copy = { italic: true, color: COPY_COLOR };
+      push("“", copy);
+      nest(token.slice(1, -1), copy);
+      push("”", copy);
     } else {
       // 【动作】与「元素」连括号一起加粗，括号本身也是视觉标记的一部分。
       // 必须先剥掉括号再递归，否则内层会再次匹配到同一对括号、无限递归。
@@ -152,6 +160,11 @@ export function mermaid(code) {
 /** 代码块 */
 export function codeBlock(code, language) {
   return ["codeBlock", language ? { language } : {}, ["text", {}, code]];
+}
+
+/** 段落里的代码块：表格单元格里的代码块要独占一个段落（同 Mermaid） */
+export function codeParagraph(code, language) {
+  return ["p", { lh: LH_BODY }, codeBlock(code, language)];
 }
 
 /** 图片独占段落 */

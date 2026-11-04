@@ -35,11 +35,19 @@ async function load() {
 
 const save = (store) => fs.writeFile(path.join(REVIEWS_DIR, store.file), `${JSON.stringify(store.comments, null, 2)}\n`, "utf8");
 
-/** 坐标是相对原型源码根；补上工程相对路径，Agent 直接能打开 */
+/**
+ * 坐标是相对原型源码根；补上工程相对路径，Agent 直接能打开。
+ * 坐标落在共用组件里（components/ 下的表格一格、卡片标题……）时只看坐标不知道是哪一页的哪一格，
+ * 后面带上所在页面组件与元素名（「ExperimentsPage › columnheader · 状态」），免得再去翻 JSON
+ */
 function where(anchor = {}) {
   const s = anchor.src;
-  if (s?.file) return `${WEB_REL ? `${WEB_REL}/` : ""}${s.file}:${s.line}:${s.col}`;
-  return `（没有源码坐标）${anchor.label ?? anchor.selector ?? ""}`;
+  if (!s?.file) return `（没有源码坐标）${anchor.label ?? anchor.selector ?? ""}`;
+  const at = `${WEB_REL ? `${WEB_REL}/` : ""}${s.file}:${s.line}:${s.col}`;
+  if (!/(^|\/)components\//.test(s.file)) return at;
+  const page = (anchor.componentPath ?? []).filter((n) => !/^App$|Layout$/.test(n))[0];
+  const what = flat(anchor.label).slice(0, 40);
+  return `${at}（${[page, what].filter(Boolean).join(" › ")}）`;
 }
 
 async function open(route) {

@@ -62,7 +62,7 @@ Commands:
   check-frs                Validate feature specs
   check-ui                 UI conformance check (reference implementation)
   check-routes             Route registration check (reference implementation)
-  check-prototype-syntax   Read-only JS / Vue SFC syntax check
+  check-prototype-syntax   Read-only JS / JSX / Vue syntax and missing-import check
   capture-shots            Capture PRD reference screenshots
   capture-kb-shots         Capture documentation screenshots
   record-kb-clips          Record documentation clips
