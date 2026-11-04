@@ -142,6 +142,8 @@ setTimeout(() => {}, 60000);
 `);
   await variant("asker", `fs.writeFileSync(path.join(memoryDir, "note.md"), "remember the migration rule");
 result("This needs a migration. Please approve the plan first.");`);
+  await variant("steady", `out({ type: "rate_limit_event", rate_limit_info: { status: "allowed", unifiedWindows: { five_hour: { utilization: 0.42 }, seven_day: { utilization: 0.51 } } } });
+result("Please approve the plan.");`);
   await variant("apierror", `
 out({ type: "assistant", message: { model: "<synthetic>", content: [{ type: "text", text: "API Error: 400 this version does not support the model" }] }, is_api_error_message: true });
 out({ type: "result", subtype: "success", is_error: true, terminal_reason: "api_error", api_error_status: 400, result: "API Error: 400 this version does not support the model", total_cost_usd: 0.001, num_turns: 1, permission_denials: [] });
@@ -304,6 +306,43 @@ test("false claims, loops, rule answers, timeouts and comparison", async () => {
   assert.deepEqual(rows.map((r) => [r.id, r.change]), [["add-broken", "improved"]]);
   const md = cli("compare", runOf(claimer), fixer);
   assert.match(md.stdout, /add-broken \| improved \| 0% → 100%/);
+});
+
+test("a quota limit stops new attempts; resume adds rounds and refuses changed tasks", async () => {
+  const runOf = (res) => res.stdout.match(/Run: .*?([0-9]{8}-[0-9]{6}-[a-z]+)/)[1];
+  const summaryOf = async (runId) => JSON.parse(await fs.readFile(path.join(project, ".builderharness/evals", runId, "summary.json"), "utf8"));
+
+  const limited = cli("run", "--variant", "steady", "add-broken", "rule", "--repeat", "2", "--max-quota", "0.4");
+  assert.equal(limited.status, 0, limited.stderr);
+  const runId = runOf(limited);
+  const first = await summaryOf(runId);
+  assert.equal(first.totals.attempts, 1, "the fake agent reports 42% of five hours and 51% of seven days");
+  assert.match(first.stoppedEarly, /seven-day subscription window at 51%, limit 40%/);
+
+  const resumed = cli("run", "--resume", runId, "--repeat", "3");
+  assert.equal(resumed.status, 0, resumed.stderr);
+  assert.equal(runOf(resumed), runId, "resume continues the same run");
+  const all = await summaryOf(runId);
+  assert.equal(all.totals.attempts, 6);
+  assert.equal(all.tasks["add-broken"].attempts, 3);
+  assert.equal(all.stoppedEarly, undefined);
+  const meta = JSON.parse(await fs.readFile(path.join(project, ".builderharness/evals", runId, "run.json"), "utf8"));
+  assert.equal(meta.repeat, 3);
+  assert.equal(meta.resumedAt.length, 1);
+
+  const nothingLeft = cli("run", "--resume", runId, "--dry-run");
+  assert.equal(JSON.parse(nothingLeft.stdout).pending, 0);
+
+  const taskFile = path.join(project, "evals/tasks/rule/task.json");
+  const original = await fs.readFile(taskFile, "utf8");
+  await fs.writeFile(taskFile, original.replace('"Add a column."', '"Add two columns."'));
+  try {
+    const refused = cli("run", "--resume", runId, "--repeat", "4", "--skip-validate");
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /changed since run .* started: rule/);
+  } finally {
+    await fs.writeFile(taskFile, original);
+  }
 });
 
 test("the work directory may not sit inside the project", async () => {

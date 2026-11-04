@@ -13,7 +13,8 @@ host project; traces contain the project's code, so they stay local.
 builderharness eval list
 builderharness eval validate                      # check every task, no model calls
 builderharness eval run --variant current --dry-run
-builderharness eval run --variant current --repeat 3 --max-total-usd 20
+builderharness eval run --variant current --repeat 1 --max-total-usd 20 --max-quota 0.85
+builderharness eval run --resume <runId> --repeat 3   # the remaining rounds, later
 builderharness eval compare <runA> <runB>
 ```
 
@@ -134,8 +135,15 @@ cloned directories. The agent can use git but cannot see what was injected. Unde
 
 `summary.json` and `summary.md` aggregate per task: solve rate over attempts,
 unstable tasks (some attempts solved, some not), median cost, time and turns, and
-signal counts. `--max-total-usd` stops starting new attempts once the run has spent
-that much; repeats are interleaved, so an early stop still covers every task.
+signal counts. `--max-total-usd` stops starting new attempts once this invocation
+has spent that much, and `--max-quota <share>` once the fuller subscription window
+(five-hour or seven-day) reported by the last attempt reaches that share. Repeats
+are interleaved, so an early stop still covers every task.
+
+`--resume <runId>` continues a run: the same variant and tasks, with `--repeat`
+raised to add rounds. Attempts that ended in an infrastructure or host error run
+again; the others are kept. Resuming is refused when a task or the variant changed
+since the run started, so one run never mixes two versions of the harness.
 
 Process signals, read from the trace (heuristics; check the trace before acting):
 

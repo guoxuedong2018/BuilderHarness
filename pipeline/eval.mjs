@@ -5,7 +5,8 @@
  *   builderharness eval list
  *   builderharness eval validate [task ...] [--split dev|holdout|all]
  *   builderharness eval run --variant <name> [task ...] [--split dev] [--repeat 3]
- *                          [--max-total-usd N] [--keep] [--dry-run] [--skip-validate]
+ *                          [--max-total-usd N] [--max-quota 0.85] [--keep] [--dry-run] [--skip-validate]
+ *   builderharness eval run --resume <runId> [--repeat N] [...]
  *   builderharness eval compare <runA> <runB>
  *
  * Options for every command: --root <project>, --evals <dir> (default evals),
@@ -26,7 +27,7 @@ import { hostError, parseTrace, traceMetrics, traceSignals } from "./lib/eval-tr
 import { matchesAny, timestamp } from "./lib/eval-util.mjs";
 import { ancestorInstructions, applyGradeFiles, createWorkspace, listFilesAt, pathExistsAt, resolveCommit, workspaceDiff } from "./lib/eval-workspace.mjs";
 
-const VALUE_FLAGS = new Set(["--root", "--evals", "--out", "--variant", "--split", "--repeat", "--max-total-usd"]);
+const VALUE_FLAGS = new Set(["--root", "--evals", "--out", "--variant", "--split", "--repeat", "--max-total-usd", "--max-quota", "--resume"]);
 const BOOL_FLAGS = new Set(["--keep", "--dry-run", "--skip-validate", "--json"]);
 
 function parseArgs(argv) {
@@ -49,7 +50,8 @@ function help(code = 0) {
   builderharness eval list
   builderharness eval validate [task ...] [--split dev|holdout|all]
   builderharness eval run --variant <name> [task ...] [--split dev] [--repeat 3]
-                         [--max-total-usd N] [--keep] [--dry-run] [--skip-validate]
+                         [--max-total-usd N] [--max-quota 0.85] [--keep] [--dry-run] [--skip-validate]
+  builderharness eval run --resume <runId> [--repeat N]   continue a run, e.g. with more rounds
   builderharness eval compare <runA> <runB>
 
 Options: --root <project>  --evals <dir> (default evals)  --out <dir> (default .builderharness/evals)
@@ -211,6 +213,8 @@ async function validate(opts) {
 async function attempt(ctx, task, variant, rep, { runId, runDir, workRoot, keep }) {
   const attemptDir = path.join(runDir, task.id, String(rep));
   const logDir = path.join(attemptDir, "grade");
+  // A resumed run repeats attempts that ended in an error; start them from a clean folder.
+  await fs.rm(attemptDir, { recursive: true, force: true });
   await fs.mkdir(logDir, { recursive: true });
   const dir = path.join(workRoot, runId, `${task.id}-${rep}`);
   await fs.rm(dir, { recursive: true, force: true });
@@ -276,28 +280,74 @@ async function collectMemory(memoryDir, attemptDir, runId) {
   return { files: files.length, removed: true };
 }
 
+async function readRunDir(ctx, ref) {
+  const dir = [path.resolve(ref), path.join(ctx.out, ref)].find((d) => existsSync(path.join(d, "run.json")));
+  if (!dir) throw new Error(`No run.json for run ${ref}`);
+  const run = JSON.parse(await fs.readFile(path.join(dir, "run.json"), "utf8"));
+  const attempts = [];
+  for (const task of await fs.readdir(dir, { withFileTypes: true })) {
+    if (!task.isDirectory()) continue;
+    for (const rep of await fs.readdir(path.join(dir, task.name)).catch(() => [])) {
+      const record = await readJson(path.join(dir, task.name, rep, "result.json"), null);
+      if (record) attempts.push(record);
+    }
+  }
+  return { dir, run, attempts };
+}
+
+/** The fuller subscription window (five-hour or seven-day) in the latest attempt that reported one. */
+function latestQuota(records) {
+  for (let i = records.length - 1; i >= 0; i--) {
+    const q = records[i].metrics?.quota;
+    if (!q) continue;
+    const five = q.fiveHour?.end ?? 0;
+    const seven = q.sevenDay?.end ?? 0;
+    return five >= seven ? { share: five, window: "five-hour" } : { share: seven, window: "seven-day" };
+  }
+  return null;
+}
+
 async function run(opts) {
   const ctx = await load(opts);
-  const variant = await loadVariant(ctx.dir, opts.variant);
-  const tasks = selectTasks(ctx.tasks, { ids: opts.positional, split: opts.split ?? "dev" });
-  const repeat = Number(opts.repeat ?? 3);
+  const previous = opts.resume ? await readRunDir(ctx, opts.resume) : null;
+  if (previous && opts.positional.length) throw new Error("--resume continues the run's own tasks; do not name tasks");
+  if (previous && opts.variant && opts.variant !== previous.run.variant) throw new Error(`run ${previous.run.runId} uses variant ${previous.run.variant}`);
+  const variant = await loadVariant(ctx.dir, previous ? previous.run.variant : opts.variant);
+  const tasks = previous ? selectTasks(ctx.tasks, { ids: previous.run.plan.tasks }) : selectTasks(ctx.tasks, { ids: opts.positional, split: opts.split ?? "dev" });
+  const repeat = Number(opts.repeat ?? previous?.run.repeat ?? 3);
   if (!Number.isInteger(repeat) || repeat < 1) throw new Error("--repeat must be a positive integer");
+  if (previous && repeat < previous.run.repeat) throw new Error(`--repeat cannot go below the run's ${previous.run.repeat}`);
   const maxTotal = opts["max-total-usd"] ? Number(opts["max-total-usd"]) : null;
   if (maxTotal !== null && !(maxTotal > 0)) throw new Error("--max-total-usd must be a positive number");
+  const maxQuota = opts["max-quota"] ? Number(opts["max-quota"]) : null;
+  if (maxQuota !== null && !(maxQuota > 0 && maxQuota <= 1)) throw new Error("--max-quota is a share of the subscription window, between 0 and 1");
   const workRoot = workRootFor(ctx);
   checkWorkRoot(ctx, workRoot);
 
   const registry = await readJson(path.join(ctx.out, "validated.json"), {});
+  const hashes = { variant: await taskHash(variant.dir), tasks: {} };
   const notValid = [];
   for (const task of tasks) {
+    hashes.tasks[task.id] = await taskHash(task.dir);
     const entry = registry[task.id];
-    if (!entry || entry.status !== "valid" || entry.hash !== (await taskHash(task.dir)) || entry.base !== task.baseSha) notValid.push(task.id);
+    if (!entry || entry.status !== "valid" || entry.hash !== hashes.tasks[task.id] || entry.base !== task.baseSha) notValid.push(task.id);
   }
   if (notValid.length && !opts["skip-validate"]) {
     throw new Error(`task(s) without a current passing validation: ${notValid.join(", ")}. Run builderharness eval validate first.`);
   }
+  if (previous?.run.hashes) {
+    // All attempts of one run must have seen the same tasks and the same harness.
+    const changed = [
+      previous.run.hashes.variant !== hashes.variant ? `variant ${variant.name}` : null,
+      ...tasks.filter((t) => previous.run.hashes.tasks?.[t.id] !== hashes.tasks[t.id]).map((t) => t.id),
+    ].filter(Boolean);
+    if (changed.length) throw new Error(`changed since run ${previous.run.runId} started: ${changed.join(", ")}; start a new run`);
+  }
+  // Attempts that ended in an infrastructure or host error are run again.
+  const kept = (previous?.attempts ?? []).filter((a) => a.solved !== null && a.attempt <= repeat);
+  const done = new Set(kept.map((a) => `${a.task}#${a.attempt}`));
   const ceiling = tasks.reduce((n, t) => n + t.agent.budgetUsd, 0) * repeat;
-  const plan = { variant: variant.name, host: variant.host, model: variant.model, effort: variant.effort, tasks: tasks.map((t) => t.id), repeat, attempts: tasks.length * repeat, budgetCeilingUsd: ceiling, maxTotalUsd: maxTotal, workRoot };
+  const plan = { variant: variant.name, host: variant.host, model: variant.model, effort: variant.effort, tasks: tasks.map((t) => t.id), repeat, attempts: tasks.length * repeat, pending: tasks.length * repeat - done.size, budgetCeilingUsd: ceiling, maxTotalUsd: maxTotal, maxQuota, workRoot };
   if (opts["dry-run"]) {
     console.log(JSON.stringify(plan, null, 2));
     return;
@@ -310,37 +360,54 @@ async function run(opts) {
     return;
   }
   warnIfTracked(ctx);
-  const runId = `${timestamp()}-${variant.name}`;
-  const runDir = path.join(ctx.out, runId);
-  const meta = { runId, variant: variant.name, model: variant.model, effort: variant.effort, host, base: [...new Set(tasks.map((t) => t.baseSha))].join(","), repeat, startedAt: new Date().toISOString() };
-  await writeJson(path.join(runDir, "run.json"), { ...meta, plan });
-  const attempts = [];
+  const runId = previous ? previous.run.runId : `${timestamp()}-${variant.name}`;
+  const runDir = previous ? previous.dir : path.join(ctx.out, runId);
+  const meta = previous
+    ? {
+        ...Object.fromEntries(Object.entries(previous.run).filter(([k]) => !["plan", "hashes", "stoppedEarly", "finishedAt"].includes(k))),
+        host,
+        repeat,
+        resumedAt: [...(previous.run.resumedAt ?? []), new Date().toISOString()],
+      }
+    : { runId, variant: variant.name, model: variant.model, effort: variant.effort, host, base: [...new Set(tasks.map((t) => t.baseSha))].join(","), repeat, startedAt: new Date().toISOString() };
+  await writeJson(path.join(runDir, "run.json"), { ...meta, plan, hashes });
+  const index = (id) => tasks.findIndex((t) => t.id === id);
+  const ordered = (list) => [...list].sort((x, y) => x.attempt - y.attempt || index(x.task) - index(y.task));
+  const attempts = [...kept];
+  const fresh = [];
   let spent = 0;
   outer: for (let rep = 1; rep <= repeat; rep++) {
     for (const task of tasks) {
+      if (done.has(`${task.id}#${rep}`)) continue;
       if (maxTotal !== null && spent >= maxTotal) {
         meta.stoppedEarly = `spent $${spent.toFixed(2)} of the $${maxTotal} limit`;
+        break outer;
+      }
+      const used = latestQuota(fresh);
+      if (maxQuota !== null && used !== null && used.share >= maxQuota) {
+        meta.stoppedEarly = `${used.window} subscription window at ${Math.round(used.share * 100)}%, limit ${Math.round(maxQuota * 100)}%`;
         break outer;
       }
       process.stdout.write(`… ${task.id} #${rep}\n`);
       const record = await attempt(ctx, task, variant, rep, { runId, runDir, workRoot, keep: opts.keep });
       spent += record.metrics?.costUsd ?? 0;
       attempts.push(record);
+      fresh.push(record);
       if (record.hostError) {
         // Every further attempt would fail the same way (unsupported model, login, limits).
         meta.stoppedEarly = `host error on ${task.id} #${rep}: ${record.infraError}`;
-        console.log(`  ${record.infraError}\n  Stopping: fix the host and run again.`);
-        await writeJson(path.join(runDir, "summary.json"), summarize({ ...meta, finishedAt: null }, attempts));
+        console.log(`  ${record.infraError}\n  Stopping: fix the host, then continue with --resume ${runId}.`);
         break outer;
       }
       const verdict = record.solved === null ? `error: ${record.infraError}` : record.solved ? "solved" : "unsolved";
-      console.log(`  ${verdict} · $${(record.metrics?.costUsd ?? 0).toFixed(2)} · ${Math.round((record.agent?.wallMs ?? 0) / 1000)}s`);
-      const summary = summarize({ ...meta, finishedAt: null }, attempts);
-      await writeJson(path.join(runDir, "summary.json"), summary);
+      const q = record.metrics?.quota?.fiveHour;
+      console.log(`  ${verdict} · $${(record.metrics?.costUsd ?? 0).toFixed(2)} · ${Math.round((record.agent?.wallMs ?? 0) / 1000)}s${q ? ` · five-hour window ${Math.round(q.end * 100)}%` : ""}`);
+      await writeJson(path.join(runDir, "summary.json"), summarize({ ...meta, finishedAt: null }, ordered(attempts)));
     }
   }
-  const summary = summarize({ ...meta, finishedAt: new Date().toISOString() }, attempts);
+  const summary = summarize({ ...meta, finishedAt: new Date().toISOString() }, ordered(attempts));
   await writeJson(path.join(runDir, "summary.json"), summary);
+  await writeJson(path.join(runDir, "run.json"), { ...meta, plan, hashes });
   const md = summaryMarkdown(summary);
   await fs.writeFile(path.join(runDir, "summary.md"), md);
   if (!opts.keep) await fs.rm(path.join(workRoot, runId), { recursive: true, force: true });
