@@ -16,6 +16,7 @@
 - `AGENTS.md` (root and scaffold) adds eight design principles, collaboration rules and how to realign after a correction. `scripts/fixtures/product-design-cases.json` holds 14 design-review regression scenarios (not yet run against a model).
 - `review open` names the page and element when a source coordinate lands in a shared component; CDP key presses carry key codes so editors that read `keyCode` receive them.
 - The desktop shell's lockfile resolves every package from the public npm registry (same versions and integrity hashes) and pins its own `.npmrc`, since npm does not read the root one from a nested project. `check-public-deps` now covers every committed lockfile and the `.npmrc` beside it.
+- Added `builderharness eval validate / run / compare / list`: repeatable agent evals on a host project's own tasks, with injected defects, hidden tests, isolated workspaces, stream-json traces, process signals and per-run budgets. See docs/evals.md.
 
 ## 0.8.0 — 2026-10-23
 
