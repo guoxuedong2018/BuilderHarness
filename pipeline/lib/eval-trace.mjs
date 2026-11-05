@@ -3,8 +3,14 @@
  * and derives the metrics and process signals the eval reports.
  *
  * The parser only relies on the documented event shapes: `system/init`, `assistant`
- * messages with `tool_use` blocks, `user` messages with `tool_result` blocks and the
- * final `result` event. Unknown events are counted and ignored.
+ * messages with `tool_use` blocks, `user` messages with `tool_result` blocks and
+ * `result` events. Unknown events are counted and ignored.
+ *
+ * One session can print several `result` events: when the agent leaves a command
+ * running in the background, print mode ends the turn with a result, waits for the
+ * command and continues in a new turn. Each result covers its own segment (turns,
+ * duration, usage, permission denials), while `total_cost_usd` and
+ * `duration_api_ms` are running totals, so the metrics add segments up.
  */
 import path from "node:path";
 import { matchesAny } from "./eval-util.mjs";
@@ -47,7 +53,8 @@ export function parseTrace(raw) {
     }
   }
   const init = events.find((e) => e.type === "system" && e.subtype === "init") ?? null;
-  const result = [...events].reverse().find((e) => e.type === "result") ?? null;
+  const results = events.filter((e) => e.type === "result");
+  const result = results[results.length - 1] ?? null;
   const steps = [];
   const toolResults = new Map();
   let lastText = "";
@@ -69,6 +76,7 @@ export function parseTrace(raw) {
     rateLimits: events.filter((e) => e.type === "rate_limit_event" && e.rate_limit_info).map((e) => e.rate_limit_info),
     init: pickInit(init),
     result,
+    results,
     steps,
     toolResults,
     answer: typeof result?.result === "string" && result.result.trim() ? result.result : lastText,
@@ -107,23 +115,36 @@ function quota(rateLimits = []) {
   return { fiveHour: span("five_hour"), sevenDay: span("seven_day"), status: last.status ?? null, overage: last.overageStatus ?? null };
 }
 
+/** Sum of a per-segment field over all results; null when no result reports it. */
+function sumOf(results, pick) {
+  const values = results.map(pick).filter((v) => typeof v === "number");
+  return values.length ? values.reduce((a, b) => a + b, 0) : null;
+}
+
+/** Largest value of a running total over all results; null when no result reports it. */
+function totalOf(results, pick) {
+  const values = results.map(pick).filter((v) => typeof v === "number");
+  return values.length ? Math.max(...values) : null;
+}
+
 export function traceMetrics(parsed) {
   const r = parsed.result;
-  const usage = r?.usage ?? {};
+  const results = parsed.results ?? (r ? [r] : []);
   return {
     quota: quota(parsed.rateLimits),
     stopReason: r ? r.terminal_reason ?? r.subtype ?? "unknown" : "no-result",
     subtype: r?.subtype ?? null,
     isError: r ? Boolean(r.is_error) : true,
-    costUsd: typeof r?.total_cost_usd === "number" ? r.total_cost_usd : null,
-    turns: r?.num_turns ?? null,
-    durationMs: r?.duration_ms ?? null,
-    apiDurationMs: r?.duration_api_ms ?? null,
+    segments: results.length,
+    costUsd: totalOf(results, (x) => x.total_cost_usd),
+    turns: sumOf(results, (x) => x.num_turns),
+    durationMs: sumOf(results, (x) => x.duration_ms),
+    apiDurationMs: totalOf(results, (x) => x.duration_api_ms),
     tokens: {
-      input: usage.input_tokens ?? null,
-      output: usage.output_tokens ?? null,
-      cacheRead: usage.cache_read_input_tokens ?? null,
-      cacheCreation: usage.cache_creation_input_tokens ?? null,
+      input: sumOf(results, (x) => x.usage?.input_tokens),
+      output: sumOf(results, (x) => x.usage?.output_tokens),
+      cacheRead: sumOf(results, (x) => x.usage?.cache_read_input_tokens),
+      cacheCreation: sumOf(results, (x) => x.usage?.cache_creation_input_tokens),
     },
   };
 }
@@ -140,11 +161,16 @@ function relative(cwd, file) {
  * `verifyIgnore` paths (notes, changelogs) do not call for another verification.
  */
 export function traceSignals(parsed, { cwd, verifyCommands = [], verifyIgnore = [], successClaims = [], loopThreshold = 8 } = {}) {
-  const denials = (parsed.result?.permission_denials ?? []).map((d) => ({
-    tool: d.tool_name,
-    detail: String(d.tool_input?.command ?? d.tool_input?.file_path ?? JSON.stringify(d.tool_input ?? {})).slice(0, 200),
-    id: d.tool_use_id,
-  }));
+  // Each result lists the denials of its own segment.
+  const seen = new Set();
+  const denials = (parsed.results ?? (parsed.result ? [parsed.result] : []))
+    .flatMap((r) => r.permission_denials ?? [])
+    .filter((d) => !d.tool_use_id || (!seen.has(d.tool_use_id) && seen.add(d.tool_use_id)))
+    .map((d) => ({
+      tool: d.tool_name,
+      detail: String(d.tool_input?.command ?? d.tool_input?.file_path ?? JSON.stringify(d.tool_input ?? {})).slice(0, 200),
+      id: d.tool_use_id,
+    }));
   const denied = new Set(denials.map((d) => d.id));
   const verify = verifyCommands.map((re) => new RegExp(re, "i"));
   const editsPerFile = {};

@@ -15,7 +15,7 @@ import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { claudeArgs, cleanEnv } from "../pipeline/lib/eval-host.mjs";
 import { compareSummaries, summarize } from "../pipeline/lib/eval-report.mjs";
-import { parseTrace, traceSignals } from "../pipeline/lib/eval-trace.mjs";
+import { parseTrace, traceMetrics, traceSignals } from "../pipeline/lib/eval-trace.mjs";
 import { matchesGlob } from "../pipeline/lib/eval-util.mjs";
 
 const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../bin/builderharness.mjs");
@@ -149,6 +149,14 @@ out({ type: "assistant", message: { model: "<synthetic>", content: [{ type: "tex
 out({ type: "result", subtype: "success", is_error: true, terminal_reason: "api_error", api_error_status: 400, result: "API Error: 400 this version does not support the model", total_cost_usd: 0.001, num_turns: 1, permission_denials: [] });
 process.exit(1);
 `);
+  // Like print mode after a command left running in the background: the turn ends with a
+  // result, the session continues when the command finishes and ends with another one.
+  await variant("backgrounder", `
+edit("calc.mjs", "a - b", "a + b");
+result("Gates are running in the background.", { num_turns: 3, total_cost_usd: 0.2, duration_ms: 400, duration_api_ms: 300, usage: { input_tokens: 6, output_tokens: 3 }, permission_denials: [{ tool_name: "Bash", tool_use_id: "d1", tool_input: { command: "npm run gates; echo done" } }] });
+bash("node test/extra.test.mjs");
+result("Fixed; the background checks passed.", { num_turns: 2, total_cost_usd: 0.3, duration_ms: 100, duration_api_ms: 450, usage: { input_tokens: 4, output_tokens: 2 } });
+`);
   await variant("breaker", `
 edit("calc.mjs", "a - b", "a + b");
 fs.writeFileSync(path.join(cwd, "server.mjs"), "process.exit(3);\\n");
@@ -203,6 +211,7 @@ test("trace signals: verification after the last edit, denials, loops and claims
   assert.equal(s.claimedSuccess, true);
   assert.deepEqual(s.denials, [{ tool: "Bash", detail: "rm -rf /" }]);
   assert.equal(s.toolErrors, 1);
+  assert.equal(traceMetrics(parsed).segments, 1);
 
   // A changelog note written after the last test run does not undo the verification.
   const noted = parseTrace([
@@ -376,6 +385,49 @@ test("the work directory may not sit inside the project", async () => {
     assert.match(res.stderr, /inside the project/);
   } finally {
     await fs.writeFile(suiteFile, original);
+  }
+});
+
+test("a session that continues after background work: metrics add up its segments; regrade --trace-only re-reads old records", async () => {
+  const runOf = (res) => res.stdout.match(/Run: .*?([0-9]{8}-[0-9]{6}-[a-z]+)/)[1];
+  const res = cli("run", "--variant", "backgrounder", "add-broken", "--repeat", "1");
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  const runId = runOf(res);
+  const resultFile = path.join(project, ".builderharness/evals", runId, "add-broken/1/result.json");
+  const record = JSON.parse(await fs.readFile(resultFile, "utf8"));
+  assert.equal(record.solved, true);
+  assert.equal(record.answer, "Fixed; the background checks passed.", "the answer is the last segment's");
+  assert.deepEqual(
+    { segments: record.metrics.segments, turns: record.metrics.turns, cost: record.metrics.costUsd, ms: record.metrics.durationMs, api: record.metrics.apiDurationMs, input: record.metrics.tokens.input },
+    { segments: 2, turns: 5, cost: 0.3, ms: 500, api: 450, input: 10 },
+    "turns, durations and usage are per segment; cost and API time are running totals",
+  );
+  assert.deepEqual(record.signals.denials, [{ tool: "Bash", detail: "npm run gates; echo done" }], "denials from every segment");
+
+  // A record written by an older parser, and a run item whose recorded verdict must be kept.
+  const old = { ...record, metrics: { ...record.metrics, turns: 2, segments: undefined }, signals: { ...record.signals, denials: [] } };
+  old.grade = record.grade.map((g) => (g.id === "extra" ? { ...g, status: "fail" } : g));
+  await fs.writeFile(resultFile, JSON.stringify(old, null, 2));
+  const again = cli("regrade", runId, "--trace-only");
+  assert.equal(again.status, 0, again.stderr);
+  assert.match(again.stdout, /add-broken #1: solved → unsolved \(turns 2 → 5, denials 0 → 1\)/);
+  const fixed = JSON.parse(await fs.readFile(resultFile, "utf8"));
+  assert.equal(fixed.metrics.turns, 5);
+  assert.equal(fixed.signals.denials.length, 1);
+  assert.equal(fixed.grade.find((g) => g.id === "extra").status, "fail", "run items are not run again");
+  assert.equal(fixed.grade.find((g) => g.id === "untouched").status, "pass");
+  assert.equal(fixed.previous.at(-1).traceOnly, true);
+  assert.equal(existsSync(path.join(tmp, "work", runId)), false, "no workspace is rebuilt");
+
+  const taskFile = path.join(project, "evals/tasks/add-broken/task.json");
+  const original = await fs.readFile(taskFile, "utf8");
+  await fs.writeFile(taskFile, original.replace("Sums are wrong", "Sums are off"));
+  try {
+    const refused = cli("regrade", runId, "--trace-only");
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /tasks changed since the run: add-broken/);
+  } finally {
+    await fs.writeFile(taskFile, original);
   }
 });
 

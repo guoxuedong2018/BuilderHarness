@@ -7,7 +7,7 @@
  *   builderharness eval run --variant <name> [task ...] [--split dev] [--repeat 3]
  *                          [--max-total-usd N] [--max-quota 0.85] [--keep] [--dry-run] [--skip-validate]
  *   builderharness eval run --resume <runId> [--repeat N] [...]
- *   builderharness eval regrade <runId>        grade saved attempts again after a grader fix
+ *   builderharness eval regrade <runId> [--trace-only]   grade saved attempts again after a grader fix
  *   builderharness eval compare <runA> <runB>
  *
  * Options for every command: --root <project>, --evals <dir> (default evals),
@@ -29,7 +29,7 @@ import { matchesAny, timestamp } from "./lib/eval-util.mjs";
 import { ancestorInstructions, applyGradeFiles, createWorkspace, listFilesAt, pathExistsAt, resolveCommit, workspaceDiff } from "./lib/eval-workspace.mjs";
 
 const VALUE_FLAGS = new Set(["--root", "--evals", "--out", "--variant", "--split", "--repeat", "--max-total-usd", "--max-quota", "--resume"]);
-const BOOL_FLAGS = new Set(["--keep", "--dry-run", "--skip-validate", "--json"]);
+const BOOL_FLAGS = new Set(["--keep", "--dry-run", "--skip-validate", "--json", "--trace-only"]);
 
 function parseArgs(argv) {
   const [command, ...rest] = argv;
@@ -53,7 +53,8 @@ function help(code = 0) {
   builderharness eval run --variant <name> [task ...] [--split dev] [--repeat 3]
                          [--max-total-usd N] [--max-quota 0.85] [--keep] [--dry-run] [--skip-validate]
   builderharness eval run --resume <runId> [--repeat N]   continue a run, e.g. with more rounds
-  builderharness eval regrade <runId>                    grade saved attempts again after a grader fix
+  builderharness eval regrade <runId> [--trace-only]     grade saved attempts again after a grader fix
+                         (--trace-only: re-read traces after a parser fix, keep run items)
   builderharness eval compare <runA> <runB>
 
 Options: --root <project>  --evals <dir> (default evals)  --out <dir> (default .builderharness/evals)
@@ -434,25 +435,34 @@ async function run(opts) {
  * agent: each workspace is rebuilt from the snapshot and the attempt's diff.patch. Used
  * when a grader turns out to be wrong. Attempts that ended in an error are left for
  * --resume. The previous verdict stays in the result under `previous`.
+ *
+ * With --trace-only, nothing is rebuilt: metrics, signals and the items that need no
+ * workspace (unchanged, changedWithin, answer, signal) are read again from the saved
+ * trace and diff, and the recorded `run` items are kept. Used after a fix to the trace
+ * parser; the tasks must be unchanged since the run.
  */
 async function regrade(opts) {
-  if (opts.positional.length !== 1) throw new Error("regrade needs one run: builderharness eval regrade <runId>");
+  if (opts.positional.length !== 1) throw new Error("regrade needs one run: builderharness eval regrade <runId> [--trace-only]");
+  const traceOnly = Boolean(opts["trace-only"]);
   const ctx = await load(opts);
   const { dir: runDir, run: meta, attempts } = await readRunDir(ctx, opts.positional[0]);
   const variant = await loadVariant(ctx.dir, meta.variant);
   const hashes = { variant: await taskHash(variant.dir), tasks: {} };
-  if (meta.hashes && meta.hashes.variant !== hashes.variant) throw new Error(`variant ${variant.name} changed since the run; its workspaces cannot be rebuilt the same way`);
+  if (!traceOnly && meta.hashes && meta.hashes.variant !== hashes.variant) throw new Error(`variant ${variant.name} changed since the run; its workspaces cannot be rebuilt the same way`);
   const tasks = selectTasks(ctx.tasks, { ids: meta.plan.tasks });
   const registry = await readJson(path.join(ctx.out, "validated.json"), {});
   const notValid = [];
+  const changedTasks = [];
   for (const task of tasks) {
     hashes.tasks[task.id] = await taskHashFor(ctx, task);
     const entry = registry[task.id];
     if (!entry || entry.status !== "valid" || entry.hash !== hashes.tasks[task.id] || entry.base !== task.baseSha) notValid.push(task.id);
+    if (meta.hashes?.tasks?.[task.id] !== hashes.tasks[task.id]) changedTasks.push(task.id);
   }
-  if (notValid.length && !opts["skip-validate"]) throw new Error(`task(s) without a current passing validation: ${notValid.join(", ")}. Run builderharness eval validate first.`);
+  if (traceOnly && changedTasks.length) throw new Error(`--trace-only keeps the recorded run items, but these tasks changed since the run: ${changedTasks.join(", ")}. Validate them and regrade without --trace-only.`);
+  if (!traceOnly && notValid.length && !opts["skip-validate"]) throw new Error(`task(s) without a current passing validation: ${notValid.join(", ")}. Run builderharness eval validate first.`);
   const workRoot = workRootFor(ctx);
-  checkWorkRoot(ctx, workRoot);
+  if (!traceOnly) checkWorkRoot(ctx, workRoot);
   const env = cleanEnv(process.env, ctx.suite.env);
   const regradedAt = new Date().toISOString();
   for (const record of attempts.sort((x, y) => x.attempt - y.attempt || x.task.localeCompare(y.task))) {
@@ -460,50 +470,63 @@ async function regrade(opts) {
     const task = tasks.find((t) => t.id === record.task);
     const attemptDir = path.join(runDir, record.task, String(record.attempt));
     const dir = path.join(workRoot, meta.runId, `regrade-${record.task}-${record.attempt}`);
-    await fs.rm(dir, { recursive: true, force: true });
+    const changed = (record.changed ?? []).map((f) => f.path);
+    // Metrics and signals come from the trace: read it again with the current parser and suite.
+    const parsed = parseTrace(await fs.readFile(path.join(attemptDir, "trace.jsonl"), "utf8").catch(() => ""));
+    const originalCwd = path.join(workRoot, meta.runId, `${record.task}-${record.attempt}`);
+    const signals = { ...signalsFor(ctx, parsed, originalCwd), outOfScope: task.scope ? changed.filter((f) => !matchesAny(f, task.scope)) : [] };
+    const answer = await fs.readFile(path.join(attemptDir, "answer.md"), "utf8").catch(() => record.answer ?? "");
+    let graded;
     try {
-      const saved = path.join(attemptDir, "inject.patch");
-      const options = taskWorkspaceOptions(ctx, task, { inject: true });
-      await createWorkspace({ ...options, inject: existsSync(saved) ? saved : options.inject, variant, dir });
-      const patch = path.join(attemptDir, "diff.patch");
-      if ((await fs.stat(patch)).size > 0) {
-        const applied = spawnSync("git", ["apply", "--binary", "--whitespace=nowarn", patch], { cwd: dir, encoding: "utf8" });
-        if (applied.status !== 0) throw new Error(`diff.patch does not apply to the rebuilt snapshot: ${applied.stderr.trim()}`);
+      if (traceOnly) {
+        const offline = task.grade.filter((item) => gradeKind(item) !== "run");
+        const fresh = await gradeWorkspace({ dir: null, task: { ...task, grade: offline }, suite: ctx.suite, env, logDir: null, mode: "run", answer, signals, changed });
+        const byId = new Map([...(record.grade ?? []).filter((g) => g.kind === "run"), ...fresh.items].map((g) => [g.id, g]));
+        graded = {
+          items: task.grade.map((item) => byId.get(item.id) ?? { id: item.id, kind: gradeKind(item), target: Boolean(item.target), status: "error", detail: "not in the recorded grade" }),
+          infraError: record.infraError ?? null,
+        };
+      } else {
+        await fs.rm(dir, { recursive: true, force: true });
+        const saved = path.join(attemptDir, "inject.patch");
+        const options = taskWorkspaceOptions(ctx, task, { inject: true });
+        await createWorkspace({ ...options, inject: existsSync(saved) ? saved : options.inject, variant, dir });
+        const patch = path.join(attemptDir, "diff.patch");
+        if ((await fs.stat(patch)).size > 0) {
+          const applied = spawnSync("git", ["apply", "--binary", "--whitespace=nowarn", patch], { cwd: dir, encoding: "utf8" });
+          if (applied.status !== 0) throw new Error(`diff.patch does not apply to the rebuilt snapshot: ${applied.stderr.trim()}`);
+        }
+        await applyGradeFiles(dir, gradeFileOptions(ctx, task));
+        const logDir = path.join(attemptDir, "grade");
+        await fs.rm(path.join(attemptDir, "grade-before-regrade"), { recursive: true, force: true });
+        await fs.rename(logDir, path.join(attemptDir, "grade-before-regrade")).catch(() => {});
+        await fs.mkdir(logDir, { recursive: true });
+        graded = await gradeWorkspace({ dir, task, suite: ctx.suite, env, logDir, mode: "run", answer, signals, changed });
       }
-      await applyGradeFiles(dir, gradeFileOptions(ctx, task));
-      const changed = (record.changed ?? []).map((f) => f.path);
-      // Signals are part of grading: read them from the trace again with the current suite.
-      const parsed = parseTrace(await fs.readFile(path.join(attemptDir, "trace.jsonl"), "utf8").catch(() => ""));
-      const originalCwd = path.join(workRoot, meta.runId, `${record.task}-${record.attempt}`);
-      const signals = { ...signalsFor(ctx, parsed, originalCwd), outOfScope: task.scope ? changed.filter((f) => !matchesAny(f, task.scope)) : [] };
-      const logDir = path.join(attemptDir, "grade");
-      await fs.rm(path.join(attemptDir, "grade-before-regrade"), { recursive: true, force: true });
-      await fs.rename(logDir, path.join(attemptDir, "grade-before-regrade")).catch(() => {});
-      await fs.mkdir(logDir, { recursive: true });
-      const answer = await fs.readFile(path.join(attemptDir, "answer.md"), "utf8").catch(() => record.answer ?? "");
-      const graded = await gradeWorkspace({ dir, task, suite: ctx.suite, env, logDir, mode: "run", answer, signals, changed });
-      const before = { solved: record.solved, falseClaim: record.falseClaim, grade: record.grade.map(({ id, status }) => ({ id, status })) };
-      record.previous = [...(record.previous ?? []), { ...before, until: regradedAt }];
-      record.signals = signals;
-      record.grade = graded.items;
-      record.infraError = graded.infraError ?? null;
-      record.solved = record.infraError ? null : solvedFrom(graded.items);
-      record.falseClaim = record.solved === false && signals.claimedSuccess;
-      const flip = before.solved === record.solved ? "unchanged" : `${before.solved ? "solved" : "unsolved"} → ${record.solved === null ? "error" : record.solved ? "solved" : "unsolved"}`;
-      console.log(`${record.task} #${record.attempt}: ${flip}`);
     } catch (error) {
       console.log(`${record.task} #${record.attempt}: not regraded (${error.message})`);
       continue;
     } finally {
-      await fs.rm(dir, { recursive: true, force: true });
+      if (!traceOnly) await fs.rm(dir, { recursive: true, force: true });
     }
+    const before = { solved: record.solved, falseClaim: record.falseClaim, grade: record.grade.map(({ id, status }) => ({ id, status })), turns: record.metrics?.turns ?? null, denials: record.signals?.denials?.length ?? null };
+    record.previous = [...(record.previous ?? []), { ...before, until: regradedAt, ...(traceOnly ? { traceOnly: true } : {}) }];
+    record.metrics = traceMetrics(parsed);
+    record.signals = signals;
+    record.grade = graded.items;
+    record.infraError = graded.infraError ?? null;
+    record.solved = record.infraError ? null : solvedFrom(graded.items);
+    record.falseClaim = record.solved === false && signals.claimedSuccess;
+    const flip = before.solved === record.solved ? "unchanged" : `${before.solved ? "solved" : "unsolved"} → ${record.solved === null ? "error" : record.solved ? "solved" : "unsolved"}`;
+    const moved = [before.turns !== record.metrics.turns ? `turns ${before.turns} → ${record.metrics.turns}` : null, before.denials !== signals.denials.length ? `denials ${before.denials} → ${signals.denials.length}` : null].filter(Boolean);
+    console.log(`${record.task} #${record.attempt}: ${flip}${moved.length ? ` (${moved.join(", ")})` : ""}`);
     await writeJson(path.join(attemptDir, "result.json"), record);
   }
-  await fs.rm(path.join(workRoot, meta.runId), { recursive: true, force: true });
-  const newMeta = { ...meta, regradedAt: [...(meta.regradedAt ?? []), regradedAt] };
+  if (!traceOnly) await fs.rm(path.join(workRoot, meta.runId), { recursive: true, force: true });
+  const newMeta = { ...meta, regradedAt: [...(meta.regradedAt ?? []), traceOnly ? `${regradedAt} (trace only)` : regradedAt] };
   delete newMeta.plan;
   delete newMeta.hashes;
-  await writeJson(path.join(runDir, "run.json"), { ...newMeta, plan: meta.plan, hashes });
+  await writeJson(path.join(runDir, "run.json"), { ...newMeta, plan: meta.plan, hashes: traceOnly ? meta.hashes : hashes });
   const index = (id) => tasks.findIndex((t) => t.id === id);
   const ordered = attempts.sort((x, y) => x.attempt - y.attempt || index(x.task) - index(y.task));
   const finishedAt = (await readJson(path.join(runDir, "summary.json"), {})).finishedAt ?? null;

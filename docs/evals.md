@@ -146,6 +146,11 @@ raised to add rounds. Attempts that ended in an infrastructure or host error run
 again; the others are kept. Resuming is refused when a task or the variant changed
 since the run started, so one run never mixes two versions of the harness.
 
+`regrade <runId> --trace-only` is for a fix to the trace parser: it reads metrics,
+signals and the items that need no workspace (`unchanged`, `changedWithin`, `answer`,
+`signal`) again from the saved trace and diff, keeps the recorded `run` items and
+rebuilds nothing. The tasks must be unchanged since the run.
+
 `regrade <runId>` fixes a wrong grader without calling the agent again. After a
 task or `suite.json` changes (a task's hash covers the suite, so its validation
 becomes stale until `validate` passes again), each graded attempt's workspace is
@@ -167,6 +172,9 @@ Process signals, read from the trace (heuristics; check the trace before acting)
 | `denials` | tool calls refused by the permission settings |
 
 Edits made through shell commands appear in `diff.patch` but not in the edit counts.
+`looping` counts edits, not failed attempts: a fix that touches many places in one
+large file trips it while every check passes. Read the edit and check sequence in the
+trace before treating it as a loop.
 
 ## Claude Code host
 
@@ -226,6 +234,19 @@ was solved in 22 turns and about two minutes. The agent ran the project's own ga
 after its last edit and checked that its new test fails without the fix. It cost
 $0.47 API-equivalent and about 1% of the five-hour window. No denials, and the
 memory folder stayed empty and was removed.
+
+Observed with Claude Code 2.1.318 over a 30-attempt baseline (2026-11-05):
+
+- When the agent leaves a command running in the background (`run_in_background`),
+  print mode ends the turn with a `result` event, waits for the command and continues
+  in a new turn, so one session can print several results. Each result reports its own
+  segment's `num_turns`, `duration_ms`, `usage` and `permission_denials`, while
+  `total_cost_usd` and `duration_api_ms` are running totals. The runner adds the
+  segments up (`metrics.segments` counts them); the final answer is the last result's.
+- Denied commands were mostly compound shell forms (`&&`/`;` chains, subshells,
+  loops, heredocs) and in-place edits through `sed -i`, `perl -pi` or a Python script,
+  even when every part was on the allow list. After a denial the agent retried with a
+  simpler command or the Edit tool, which costs turns but did not block a fix.
 
 Not part of `npm run check`: real host runs cost money and need a login. The
 runner's own tests (`npm run test:eval`) use fake agents.
