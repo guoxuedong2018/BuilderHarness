@@ -124,7 +124,7 @@ my-prototype/
 
 - `destination`：给内容检查台显示目的地名称、能力和说明；
 - `setIntent`：告知适配器“用户已确认这次外发”；
-- PRD 管线还需要 `createBlankDoc`、`appendImages`、`fetchJsonml`；不需要 PRD 时可以不实现；
+- PRD 管线还需要 `createBlankDoc`、`appendImages`、`fetchJsonml`；不需要 PRD 时可以不实现。`createBlankDoc` 可能收到 `folderId`（来自 `prd --folder`），没有目录概念的目标端可以忽略；已发布 PRD 的补丁按每批最多 50 个操作提交（相邻删除先合并），每批先 `dryRun`；
 - 未来消息卡片/视觉物料可以在适配器里增加 `publishResource({ resource, target })`，返回外部引用；核心只依赖统一动作，不依赖某个平台的字段。
 
 完整 TypeScript 接口见 [publishing.md](./publishing.md)。

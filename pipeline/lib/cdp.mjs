@@ -368,9 +368,17 @@ export async function upload(session, selector, files) {
   await session.send("DOM.setFileInputFiles", { nodeId, files });
 }
 
+/**
+ * 按键要带上 keyCode：只给 key 时 keyCode 是 0，CodeMirror 这类按 keyCode 认键的编辑器收不到
+ * （如截图前把光标挪到某一行末尾：ArrowDown、End）
+ */
+const KEY_CODES = { Backspace: 8, Tab: 9, Enter: 13, Escape: 27, End: 35, Home: 36, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Delete: 46 };
+
 export async function press(session, key) {
-  await session.send("Input.dispatchKeyEvent", { type: "keyDown", key });
-  await session.send("Input.dispatchKeyEvent", { type: "keyUp", key });
+  const code = KEY_CODES[key];
+  const extra = code ? { code: key, windowsVirtualKeyCode: code, nativeVirtualKeyCode: code } : {};
+  await session.send("Input.dispatchKeyEvent", { type: "keyDown", key, ...extra });
+  await session.send("Input.dispatchKeyEvent", { type: "keyUp", key, ...extra });
 }
 
 /** 量一个元素的视口坐标，用于截图裁剪 */

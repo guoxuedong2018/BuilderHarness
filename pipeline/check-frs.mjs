@@ -86,7 +86,7 @@ function checkFeature(key, frs, routes) {
       else note(key, `分组「${label}」的页面 «${route}» 还没建，画原型时三处登记`);
     } else if (!routes.has(route)) fail(key, `分组「${label}」的 route «${route}» 不在 frs-map.js 里`);
 
-    for (const shot of group.shots ?? []) usedShots.add(shot);
+    for (const shot of group.shots ?? []) if (typeof shot === "string") usedShots.add(shot); // 对象是人插的图，不是配方
 
     if ((group.points ?? []).length === 0) fail(key, `分组「${label}」没有功能点`);
 

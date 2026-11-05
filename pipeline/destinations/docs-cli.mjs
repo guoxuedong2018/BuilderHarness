@@ -237,9 +237,10 @@ export async function fetchJsonml(docId) {
   return res.result ?? res;
 }
 
-/** 建一篇空文档（正文之后用 JsonML 写）。**不幂等**，不会自动重试 */
-export async function createBlankDoc({ title, viewModel = "A3" }) {
-  const res = await call(`${DOCS_CLI} word +create --title ${shellQuote(title)} --view-model ${shellQuote(viewModel)}`);
+/** 建一篇空文档（正文之后用 JsonML 写）；给了 folderId 就建在那个目录下。**不幂等**，不会自动重试 */
+export async function createBlankDoc({ title, viewModel = "A3", folderId = null }) {
+  const folderArg = folderId ? ` --folder-id ${shellQuote(folderId)}` : "";
+  const res = await call(`${DOCS_CLI} word +create --title ${shellQuote(title)} --view-model ${shellQuote(viewModel)}${folderArg}`);
   const r = res.result ?? res;
   return { docId: r.docId, url: r.openDocUrl };
 }
