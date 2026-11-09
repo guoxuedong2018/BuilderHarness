@@ -56,6 +56,11 @@ export function ReviewBar({ tools }) {
           </a>
         ))}
 
+        <a href={`/__proto_review/decisions${currentFrs.length === 1 ? "?key=" + encodeURIComponent(currentFrs[0].key) : ""}`}
+          target="_blank" rel="noopener noreferrer" className="rb-link">
+          待决清单 <Icon name="open" size={12} />
+        </a>
+
         {!snap.persistent && (
           <span className="rb-warn" title="未连接开发服务，评论不会写入 docs/reviews（刷新丢失）">
             <Icon name="warn" size={12} /> 未持久化

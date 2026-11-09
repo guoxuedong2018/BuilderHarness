@@ -148,3 +148,9 @@ npx builderharness check-frs <KEY>
 - 状态改动同步 README 头部和 `FRS.json.status`；转「已确认」由人拍板。
 - 最近的决定替代旧规则时，同步检查 scope、spec、AC、FLOW/STATE 和原型；不靠删验收项掩盖实现缺口。
 - 评审结论每条都落到 FRS/README，不无声丢弃；其中研发会想改、改了就破坏设计意图的，内联成对应功能点的一句约束——决策表本身不进 PRD。
+
+## 与实现和验收交接
+
+待决问题留在需求 README 的「待决清单」，用稳定 ID 关联回写记录。
+`FRS.verification` 关联到 AC，写清可观察结果和验证方法。
+阻断项要显式声明，只把确实影响交付判断的项设为阻断。

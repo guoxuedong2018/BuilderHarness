@@ -16,6 +16,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { listDecisions, readDecisions, resolveDecision } from "./lib/decisions.mjs";
 import { REPO_ROOT, REVIEWS_DIR, WEB_DIR } from "./lib/paths.mjs";
 
 const AUTHOR = "Agent";
@@ -104,10 +105,31 @@ async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const opt = (k) => (rest.includes(k) ? rest[rest.indexOf(k) + 1] : null);
   const positional = rest.filter((a, i) => !a.startsWith("--") && !rest[i - 1]?.startsWith("--"));
-  if (cmd === "open") return open(opt("--route"));
+  if (cmd === "open") {
+    await open(opt("--route"));
+    if (!opt("--route")) {
+      for (const { key, items } of await listDecisions()) {
+        for (const row of items.filter((item) => item.submission && !item.submission.closedAt)) {
+          const item = row.submission;
+          console.log(`  ${key}/${row.id} [${row.status}] ${item.id} ${item.action} — ${item.author}: ${flat(item.body)}${item.source ? " · " + flat(item.source) : ""}`);
+        }
+      }
+    }
+    return;
+  }
+  if (cmd === "decisions") {
+    const key = positional[0];
+    const features = key ? [{ key, items: await readDecisions(key) }] : await listDecisions();
+    return console.log(JSON.stringify(features, null, 2));
+  }
+  if (cmd === "resolve-decision") {
+    if (positional.length !== 2) throw new Error("builderharness review resolve-decision <KEY> <submission-id>");
+    const item = await resolveDecision(...positional);
+    return console.log(`✓ Decision ${item.item} recorded`);
+  }
   if (cmd === "resolve") return resolve(positional, opt("--note"));
   if (cmd === "reply") return reply(positional[0], positional.slice(1).join(" "));
-  console.log("用法：builderharness review open [--route <路由>] | resolve <id…> [--note \"…\"] | reply <id> \"…\"");
+  console.log("用法：builderharness review open [--route <路由>] | resolve <id…> [--note \"…\"] | decisions [KEY] | resolve-decision <KEY> <submission-id> | reply <id> \"…\"");
   if (cmd && cmd !== "--help" && cmd !== "-h") process.exitCode = 1;
 }
 

@@ -13,6 +13,7 @@ export default defineConfig({
     builderHarness({
       root,
       anchorLoc: "react",
+      promo: true,
       frsRegistry: "src/config/frs-map.js",
       barLinks: [{ label: "UI spec", route: { path: "/ui-spec" } }],
       agentPrompt: "/content-draft",

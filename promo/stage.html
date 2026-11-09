@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>宣传物料</title>
+</head>
+<body>
+<!-- 通用舞台页：docs/promo/<需求>/ 下只有 scenes.js 时由 dev 服务给出（server/promo-server.js） -->
+<script type="module">
+  import { stage } from "/__promo/kit/stage.js";
+  import config from "./scenes.js";
+  stage(config).catch((e) => {
+    window.__promoError = String((e && e.stack) || e);
+    console.error(e);
+  });
+</script>
+</body>
+</html>

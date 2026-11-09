@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { anchorLoc as anchorLocPlugin } from "./build/anchor-loc.js";
 import { anchorLocReact } from "./build/anchor-loc-react.js";
 import { reviewServer } from "./server/review-server.js";
+import { promoServer } from "./server/promo-server.js";
 import { studioServer } from "./server/studio-server.js";
 
 const KIT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -43,7 +44,7 @@ function hostHasReact(root) {
   return false;
 }
 
-const KIT_PREBUNDLE = ["react", "react/jsx-runtime", "react/jsx-dev-runtime", "react-dom", "react-dom/client", "@xyflow/react", "valtio", "mermaid"];
+const KIT_PREBUNDLE = ["react", "react/jsx-runtime", "react/jsx-dev-runtime", "react-dom", "react-dom/client", "@xyflow/react", "valtio", "mermaid", "clsx", "tailwind-merge"];
 
 
 /**
@@ -139,6 +140,7 @@ export function builderHarness({
   reviewsDir,
   anchorLoc = "auto",
   agentPrompt = "",
+  promo = false,
 } = {}) {
   return [
     {
@@ -191,5 +193,6 @@ export function builderHarness({
     hostBridge({ root, frsRegistry, barExtras, barLinks, agentPrompt }),
     reviewServer({ reviewsDir }),
     studioServer(),
+    ...(promo ? [promoServer()] : []),
   ];
 }

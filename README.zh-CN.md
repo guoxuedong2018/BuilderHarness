@@ -38,6 +38,12 @@ npx --no-install builderharness context "描述准备进行的修改" --json
 浏览器评审依赖按需安装。源码安装、文件保护与移除、旧流程迁移及真实宿主验收边界见
 [已有项目接入与 0.9 迁移](./docs/migration-0.9.md)。
 
+## 从需求到交付
+
+原型项目可用 `init --prototype` 注册完整的原生工作流技能。按 Feature Key 提交决策、
+跑验收场景、生成发布计划与重渲染视频 / GIF。接线与可运行样例见
+[原型工作流](docs/prototype-workflow.md)。
+
 ## 运行演示
 
 以下步骤使用 **Node.js 22 或更高版本**和 npm。演示在本地运行，无需模型 API Key

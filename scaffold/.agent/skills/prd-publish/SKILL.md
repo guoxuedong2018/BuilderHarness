@@ -84,3 +84,6 @@ npx builderharness prd <KEY>
 - 不把 `openQuestions` 写进 PRD；开放技术问题留在 `FRS.json`，在设计评审上当面过。
 - 发布失败时保留本地构建产物；不要静默重试到线上，也不为省事 `--rewrite`。
 - 发布计划与目的地适配器 UI 在 dsh 面板 / Studio 中查看；命令行只负责确定性构建。
+
+出正式交付计划前先看 `builderharness verify <KEY> --status`。阻断项处理后重新出计划，
+对照当前 FRS、截图和目标端版本确认。沿用已有的增量更新与人工编辑保护。

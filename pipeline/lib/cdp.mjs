@@ -248,16 +248,15 @@ window.__protoFind = function (selector) {
  * 通用部分（`text=` / `text*=` / CSS / 作用域链）与框架无关；
  * `field=` 的落点和 `__protoSetState` 的实现由适配器给，引擎不认识框架。
  */
-export async function installHelpers(session) {
+export async function installHelpers(session, { onNavigation = false } = {}) {
   const adapter = await loadAdapter();
-  await evaluate(
-    session,
-    [
-      SELECTOR_HELPER,
-      `window.__protoFieldSelector = ${JSON.stringify(adapter.fieldSelector)};`,
-      adapter.stateInjector || "",
-    ].join("\n"),
-  );
+  const source = [
+    SELECTOR_HELPER,
+    `window.__protoFieldSelector = ${JSON.stringify(adapter.fieldSelector)};`,
+    adapter.stateInjector || "",
+  ].join("\n");
+  if (onNavigation) await session.send("Page.addScriptToEvaluateOnNewDocument", { source });
+  else await evaluate(session, source);
 }
 
 /**
@@ -351,7 +350,9 @@ export async function fill(session, selector, text) {
     session,
     `(() => { const el = window.__protoFind(${JSON.stringify(selector)});
       el.focus();
-      el.value = ${JSON.stringify(text)};
+      const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
+      if (setter) setter.call(el, ${JSON.stringify(text)});
+      else el.value = ${JSON.stringify(text)};
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true })); })()`,
   );

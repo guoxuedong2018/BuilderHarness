@@ -37,3 +37,11 @@ npx builderharness review resolve <id> --note "已修复"
 
 - 不删除未解决的批注。
 - 不把批注当需求真源；需要改变行为时回到 FRS / 用户确认。
+
+## 待决清单
+
+`builderharness review open` 也列出已提交待记录的产品决策。先读原问题和提交版本。
+确认或补充答复后，在 README 的「待决清单」记录结论、确认人和提交 ID，并同步 FRS / AC。
+用 `FRS.decisionRefs` 关联提交和实际受影响的 AC，再运行
+`builderharness review resolve-decision <KEY> <submission-id>`。
+打回的条目先修订问题，保留待决状态。涉及实现的批注在浏览器复查后再关闭。

@@ -15,3 +15,12 @@ Small changes need no full FRS. Behavior changes do not automatically require a 
 If no decision log exists, propose a location only when a consequential decision actually needs recording. Reuse the project's own docs. Initialization does not install browser integration, change the application, start an agent, or guarantee that the host loaded these instructions.
 
 To remove this integration, run `builderharness init --remove`. Only untouched managed entries are removed; edited files are reported for manual reconciliation. User decisions are retained. For an existing complete scaffold workflow, use `builderharness init --scaffold`.
+
+## Prototype projects
+
+Run `builderharness init --prototype` to register the feature workflow skills with the same agent.
+Use the installed skills for FRS, prototype implementation, quality, review, publishing and promotion.
+For a feature, keep confirmed decisions in its README, rules and AC IDs in FRS, and execute
+`builderharness verify <KEY>` before resolving related feedback. Use `--status` to inspect evidence
+without rerunning. Only explicitly blocking questions and scenarios block feature-linked deployments.
+The source repository includes a runnable React + Vite demo and a declarative scene recipe.

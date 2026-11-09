@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { listDecisions, readDecisions, submitDecision } from "../pipeline/lib/decisions.mjs";
 import { REVIEWS_DIR } from "../pipeline/lib/paths.mjs";
 
 /**
@@ -73,6 +74,28 @@ export function reviewServer({ reviewsDir = DEFAULT_REVIEWS_DIR } = {}) {
         if (!url.startsWith("/__proto_review")) return next();
 
         try {
+          const requestUrl = new URL(url, "http://localhost");
+          if (requestUrl.pathname === "/__proto_review/decisions" && req.method === "GET") {
+            const body = await fs.readFile(new URL("./decisions.html", import.meta.url));
+            res.setHeader("content-type", "text/html; charset=utf-8");
+            res.setHeader("cache-control", "no-store");
+            return res.end(body);
+          }
+          if (requestUrl.pathname === "/__proto_review/decisions/data" && req.method === "GET") {
+            const key = requestUrl.searchParams.get("key");
+            const items = key ? await readDecisions(key) : [];
+            return sendJson(res, 200, { features: key ? (items.length ? [{ key, items }] : []) : await listDecisions() });
+          }
+          if (requestUrl.pathname === "/__proto_review/decisions/submit" && req.method === "POST") {
+            const origin = req.headers.origin;
+            if ((origin && new URL(origin).host !== req.headers.host) ||
+                !req.headers["content-type"]?.startsWith("application/json")) {
+              return sendJson(res, 403, { error: "Submit decisions from the local review page" });
+            }
+            const body = await readBody(req);
+            try { return sendJson(res, 200, await submitDecision(body.key, body)); }
+            catch (error) { return sendJson(res, 409, { error: error.message }); }
+          }
           await fs.mkdir(storeDir, { recursive: true });
 
           if (req.method === "GET" && url.startsWith("/__proto_review/all")) {

@@ -2,6 +2,10 @@
 
 ## 0.9.0 — source changes, not published
 
+- `init --prototype` registers native feature workflow skills with references. The review toolbar collects decisions and checks README/FRS writeback before closure.
+- `verify <KEY>` runs and records AC-linked scenarios. `preflight` ships in the CLI, prototype deployment binds a plan to an artifact and target, and PRD plans can bind approval to the current content and revision.
+- `promo` renders the live prototype from scene timelines into MP4, GIF, poster and contact sheets, with per-scene input tracking. The React demo includes a runnable draft-creation workflow.
+
 - Default init connects existing Codex / Claude Code project instructions and review skills; complete templates use init --scaffold.
 - Bounded task evidence includes decisions, scoped instructions, source references and explicit omissions; legacy MCP KB requests remain compatible.
 - Review goals, constraints, historical premises and alternatives before process sizing; record meaningful confirmed decisions and actual verification limits.

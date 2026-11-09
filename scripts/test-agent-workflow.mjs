@@ -207,7 +207,9 @@ test("dry run performs no writes; conflicts and symlink parents produce partial 
   await fs.symlink(os.tmpdir(), path.join(root, ".agents"));
   const result = await initializeAgent({ root, kitRoot, agent: "codex" });
   assert.equal(result.status, "partial");
-  assert.equal(result.issues.length, 2);
+  assert.ok(result.issues.some((issue) => issue.file === "AGENTS.md" && /markers/.test(issue.reason)));
+  assert.ok(result.issues.some((issue) => issue.file.endsWith("/SKILL.md") && /Symlink/.test(issue.reason)));
+  assert.ok(result.issues.filter((issue) => issue.file !== "AGENTS.md").every((issue) => /Symlink/.test(issue.reason)));
   assert.match(await fs.readFile(path.join(root, "AGENTS.md"), "utf8"), /User modified/);
 }));
 

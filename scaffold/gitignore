@@ -16,3 +16,6 @@ docs/kb/_published.json
 !.env.example
 **/*.local
 .DS_Store
+
+**/docs/promo/*/out/
+**/docs/promo/*/.render-*/

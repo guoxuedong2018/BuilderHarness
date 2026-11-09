@@ -8,8 +8,11 @@
  */
 
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { readEnv } from "./env.mjs";
+import { PROJECT_CONFIG, REPO_ROOT } from "./paths.mjs";
+
+export const adapterName = () => readEnv("ADAPTER") || process.env.PROTO_ADAPTER || PROJECT_CONFIG.adapter || "vue2-vite";
 
 const ADAPTERS_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -22,10 +25,11 @@ let cached = null;
 export async function loadAdapter() {
   if (cached) return cached;
   // `PROTO_ADAPTER` is kept for projects migrating from the pre-0.1 API.
-  const name = readEnv("ADAPTER") || process.env.PROTO_ADAPTER || "vue2-vite";
-  const file = path.join(ADAPTERS_DIR, `${name}.mjs`);
-  const mod = await import(`file://${file}`).catch(() => {
-    throw new Error(`找不到适配器 ${name}——应当是 pipeline/adapters/${name}.mjs`);
+  const name = adapterName();
+  const file = name.startsWith(".") || path.isAbsolute(name)
+    ? path.resolve(REPO_ROOT, name) : path.join(ADAPTERS_DIR, `${name}.mjs`);
+  const mod = await import(pathToFileURL(file).href).catch((error) => {
+    throw new Error(`Cannot load capture adapter ${name}: ${error.message}`);
   });
   const adapter = mod.default;
   for (const required of ["stateInjector", "fieldSelector", "resolveRoute"]) {

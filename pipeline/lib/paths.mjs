@@ -76,19 +76,22 @@ function detectProjectRoot() {
 /** Host project root. `REPO_ROOT` is kept as a compatibility alias. */
 export const REPO_ROOT = detectProjectRoot();
 export const PROJECT_ROOT = REPO_ROOT;
+const configFile = path.join(REPO_ROOT, "builderharness.config.json");
+export const PROJECT_CONFIG = existsSync(configFile) ? JSON.parse(readFileSync(configFile, "utf8")) : {};
 
 /** Toolkit's own pipeline directory (templates and adapters ship with it). */
 export const PIPELINE_DIR = path.join(KIT_ROOT, "pipeline");
 
-export const DOCS_DIR = path.resolve(REPO_ROOT, readEnv("DOCS_DIR") || "docs");
+export const DOCS_DIR = path.resolve(REPO_ROOT, readEnv("DOCS_DIR") || PROJECT_CONFIG.docsDir || "docs");
 export const FEATURES_DIR = path.join(DOCS_DIR, "features");
 export const KB_DIR = path.join(DOCS_DIR, "kb");
 export const PRD_DIR = path.join(DOCS_DIR, "prd");
 export const REVIEWS_DIR = path.join(DOCS_DIR, "reviews");
 
 /** Prototype application directory. It does not have to be called `web`. */
-export const WEB_DIR = readEnv("WEB_DIR")
-  ? path.resolve(REPO_ROOT, readEnv("WEB_DIR"))
+const webDir = readEnv("WEB_DIR") || PROJECT_CONFIG.webDir;
+export const WEB_DIR = webDir
+  ? path.resolve(REPO_ROOT, webDir)
   : isDir(path.join(REPO_ROOT, "web"))
     ? path.join(REPO_ROOT, "web")
     : REPO_ROOT;

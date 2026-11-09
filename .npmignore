@@ -9,3 +9,6 @@ examples/*/docs/reviews/*.lock
 # Desktop release artifacts
 integrations/desktop/release/**
 integrations/desktop/node_modules/**
+
+**/docs/promo/*/out/
+**/docs/promo/*/.render-*/
