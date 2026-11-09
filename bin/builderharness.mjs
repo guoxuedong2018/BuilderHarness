@@ -22,6 +22,12 @@ const COMMANDS = {
   init: "init.mjs",
   context: "context.mjs",
   eval: "eval.mjs",
+  promo: "promo.mjs",
+  fixtures: "fixtures.mjs",
+  simulate: "simulate.mjs",
+  preflight: "preflight.mjs",
+  deploy: "deploy.mjs",
+  verify: "verify.mjs",
   kb: "kb.mjs",
   review: "review.mjs",
   prd: "prd.mjs",
@@ -51,8 +57,14 @@ Usage:
   builderharness <command> [options]
 
 Commands:
-  init                     Connect the existing agent (use --scaffold for full templates)
+  init                     Connect the existing agent (--prototype for native workflow skills, --scaffold for templates)
   context                  Read bounded task evidence, decisions and verification entries
+  fixtures                 Build synthetic or local browser-ready media fixtures
+  simulate                 Run local HTTP scenario matrices with fault injection
+  promo                    Render reproducible prototype scenes to MP4 and GIF
+  preflight                Scan a built prototype before sharing it
+  deploy                   Plan or apply an approved prototype deployment
+  verify                   Run and record a feature’s acceptance scenarios
   eval                     Validate, run and compare agent evals on the project's own tasks
   kb                       Content workspace CLI (status / shoot / ack / check / new …)
   review                   Review comments CLI (open / resolve / reply …)

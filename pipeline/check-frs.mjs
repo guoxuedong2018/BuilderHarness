@@ -114,6 +114,24 @@ function checkFeature(key, frs, routes) {
     }
   }
 
+  // 组件说明（可选）：原型地址只写路由，渲染时拼部署域名；写成完整网址会把内网域名带进仓库
+  const components = frs.components;
+  if (components != null && (!Array.isArray(components.items) || components.items.some((item) => !item || typeof item !== "object"))) {
+    fail(key, "components.items 必须是组件说明对象数组");
+  } else {
+    const items = components?.items ?? [];
+    for (const route of [components?.route, ...items.map((item) => item.route)].filter((route) => route != null)) {
+      if (typeof route !== "string" || !/^\/(?!\/)/.test(route) || route.includes("\\")) fail(key, "组件说明只接受站内路由");
+    }
+    for (const item of items) {
+      if (typeof item.name !== "string" || !item.name.trim()) fail(key, "组件说明缺少名称");
+      if (item.shots != null && !Array.isArray(item.shots)) fail(key, "components.items.shots 必须是数组");
+      else for (const shot of item.shots ?? []) if (typeof shot === "string") usedShots.add(shot);
+      if (item.notes != null && (!Array.isArray(item.notes) || item.notes.some((note) => !note))) fail(key, "components.items.notes 必须是规则数组");
+      else for (const note of item.notes ?? []) shotRefs(note).forEach((shot) => usedShots.add(shot));
+    }
+  }
+
   for (const shot of usedShots) {
     if (!shotDefs[shot]) fail(key, `引用了未定义的截图 key «${shot}»，请在 FRS.shots 里补配方`);
   }

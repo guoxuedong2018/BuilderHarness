@@ -16,9 +16,19 @@ import { EXPERIMENTS, METRICS, THREADS } from "./data";
 import { ROUTES, navigate, useHashRoute } from "./router";
 
 const THEME_KEY = "helix:theme";
+const CREATED_KEY = "helix:created-experiments";
 
-const STATUS_TONE = { running: "info", review: "warning", passed: "success", failed: "danger" };
-const STATUS_ICON = { running: "▶", review: "◔", passed: "✓", failed: "✕" };
+function readCreated() {
+  try {
+    const value = JSON.parse(localStorage.getItem(CREATED_KEY) ?? "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+const STATUS_TONE = { draft: "info", running: "info", review: "warning", passed: "success", failed: "danger" };
+const STATUS_ICON = { draft: "○", running: "▶", review: "◔", passed: "✓", failed: "✕" };
 
 function readTheme() {
   try {
@@ -100,8 +110,8 @@ function Overview({ onNew, onReview }) {
   );
 }
 
-function Experiments({ filter, onFilter, onNew }) {
-  const rows = filter === "all" ? EXPERIMENTS : EXPERIMENTS.filter((e) => e.status === filter);
+function Experiments({ experiments, filter, onFilter, onNew }) {
+  const rows = filter === "all" ? experiments : experiments.filter((e) => e.status === filter);
 
   return (
     <div className="flex flex-col gap-5">
@@ -122,7 +132,7 @@ function Experiments({ filter, onFilter, onNew }) {
         value={filter}
         onValueChange={onFilter}
         items={[
-          { value: "all", label: `All ${EXPERIMENTS.length}` },
+          { value: "all", label: `All ${experiments.length}` },
           { value: "running", label: "Running" },
           { value: "review", label: "In review" },
           { value: "passed", label: "Passed" },
@@ -171,7 +181,7 @@ function Experiments({ filter, onFilter, onNew }) {
                     </Badge>
                   </TD>
                   <TD numeric className="text-secondary">{row.samples.toLocaleString()}</TD>
-                  <TD numeric className="font-medium">{row.score.toFixed(1)}</TD>
+                  <TD numeric className="font-medium">{row.score?.toFixed(1) ?? "—"}</TD>
                   <TD numeric className="hidden text-tertiary sm:table-cell">{row.updated}</TD>
                 </TR>
               ))}
@@ -257,6 +267,7 @@ export default function App() {
   const [newOpen, setNewOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [filter, setFilter] = useState("all");
+  const [created, setCreated] = useState(readCreated);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -297,11 +308,11 @@ export default function App() {
   );
 
   const view = useMemo(() => {
-    if (path === ROUTES.experiments) return <Experiments filter={filter} onFilter={setFilter} onNew={() => setNewOpen(true)} />;
+    if (path === ROUTES.experiments) return <Experiments experiments={[...created, ...EXPERIMENTS]} filter={filter} onFilter={setFilter} onNew={() => setNewOpen(true)} />;
     if (path === ROUTES.reviews) return <Reviews onToast={notify} />;
     if (path === ROUTES.uiSpec) return <SpecView />;
     return <Overview onNew={() => setNewOpen(true)} onReview={() => navigate(ROUTES.reviews)} />;
-  }, [filter, notify, path]);
+  }, [created, filter, notify, path]);
 
   return (
     <div className="flex h-full min-h-0 bg-surface-1">
@@ -326,6 +337,11 @@ export default function App() {
         open={newOpen}
         onOpenChange={setNewOpen}
         onCreated={(name) => {
+          const next = [{ id: crypto.randomUUID(), name, owner: "Demo user", status: "draft",
+            updated: "Just now", samples: 0, score: null, tag: "Draft" }, ...created];
+          setCreated(next);
+          try { localStorage.setItem(CREATED_KEY, JSON.stringify(next)); } catch { /* session-only storage */ }
+          setFilter("all");
           notify(`Experiment “${name}” created`);
           navigate(ROUTES.experiments);
         }}

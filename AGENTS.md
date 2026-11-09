@@ -31,6 +31,7 @@
 | 提交前质量检查 | `.agent/skills/frontend-quality/SKILL.md` |
 | 发布 | `.agent/skills/prd-publish/SKILL.md` + `docs/WORKFLOW.md` |
 | 产品定位 / 对外文案 | `docs/brand.md` |
+| 功能视频 / GIF | `.agent/skills/feature-promo/SKILL.md` + `docs/prototype-workflow.md` |
 | 部署原型 | `.agent/skills/deploy-prototype/SKILL.md` + `docs/DEPLOY.md` |
 
 ## 角色边界

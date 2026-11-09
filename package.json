@@ -46,6 +46,7 @@
     "./vue2": "./client/adapters/vue2.js",
     "./react": "./client/adapters/react.jsx",
     "./ui": "./ui-spec/impl/react/index.ts",
+    "./ui-data": "./ui-spec/data/index.js",
     "./tokens.css": "./ui-spec/tokens.css",
     "./tailwind.config.js": "./ui-spec/impl/react/tailwind.config.cjs",
     "./package.json": "./package.json",
@@ -72,6 +73,10 @@
     "examples/react-tailwind/docs/features",
     "examples/react-tailwind/docs/kb",
     "pipeline",
+    "promo",
+    "examples/react-tailwind/docs/promo/EXPERIMENTS/scenes.js",
+    "examples/react-tailwind/builderharness.config.json",
+    "examples/react-tailwind/fixtures/job-simulation.mjs",
     "integrations/README.md",
     "integrations/host",
     "integrations/desktop/README.md",
@@ -98,7 +103,7 @@
     "packages/browser/README.md"
   ],
   "scripts": {
-    "check": "node scripts/check.mjs && node bin/builderharness.mjs check-frs && node scripts/check-ui-spec.mjs && node scripts/check-public-deps.mjs && node integrations/test-integrations.mjs && node scripts/test-scaffold.mjs && node --test scripts/test-agent-workflow.mjs scripts/test-prd-patch-ops.mjs scripts/test-prd-publish-flow.mjs scripts/test-check-prototype-syntax.mjs && node --test scripts/test-eval.mjs",
+    "check": "node scripts/check.mjs && node bin/builderharness.mjs check-frs && node scripts/check-ui-spec.mjs && node scripts/check-public-deps.mjs && node integrations/test-integrations.mjs && node scripts/test-scaffold.mjs && node --test scripts/test-agent-workflow.mjs scripts/test-prd-patch-ops.mjs scripts/test-prd-publish-flow.mjs scripts/test-check-prototype-syntax.mjs scripts/test-feature-workflow.mjs scripts/test-toolkit-capabilities.mjs && node --test scripts/test-eval.mjs",
     "test:scaffold": "node scripts/test-scaffold.mjs",
     "test:deploy-skill": "node scripts/test-deploy-skill-e2e.mjs",
     "test:publish-gateway": "node scripts/test-publish-gateway.mjs",

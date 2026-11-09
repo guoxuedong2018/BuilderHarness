@@ -43,6 +43,12 @@ The base CLI has zero runtime dependencies; browser review dependencies are opti
 See [existing-project setup and 0.9 migration](./docs/migration-0.9.md) for source
 installation, preservation/removal behavior and actual host-validation limits.
 
+## Prototype workflow
+
+Use `init --prototype` to register the native feature workflow skills.
+The [prototype workflow guide](docs/prototype-workflow.md) covers decision
+writeback, acceptance evidence, deployment plans and reproducible MP4/GIF renders.
+
 ## Try the demo
 
 Use **Node.js 22 or later** and npm for this walkthrough. The demo runs locally

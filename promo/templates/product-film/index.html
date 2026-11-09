@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>产品价值片</title>
+<style>
+  @font-face { font-family: "Inter"; src: url("./assets/fonts/Inter-Variable.ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: "Noto Sans SC"; src: url("./assets/fonts/NotoSansSC-Variable.ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+  :root {
+    --bg: #101010;
+    --ink: #171717;
+    --muted: #6b6b6b;
+    --accent: #e86a33;
+    --line: rgba(0, 0, 0, .08);
+    --font: "Inter", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+  body { font-family: var(--font); color: var(--ink); }
+  #stage { position: relative; width: 1280px; height: 720px; overflow: hidden; background: var(--bg); }
+
+  .window {
+    position: absolute; overflow: hidden; border-radius: 20px; background: #fff;
+    box-shadow: 0 34px 90px rgba(0,0,0,.24), 0 0 0 1px rgba(0,0,0,.08);
+    transform-origin: 50% 50%; z-index: 2;
+  }
+  .chrome {
+    position: absolute; left: 0; right: 0; top: 0; height: 30px; display: flex; align-items: center; gap: 6px;
+    padding: 0 12px; background: #f7f7f5; border-bottom: 1px solid rgba(0,0,0,.06); z-index: 2;
+  }
+  .chrome i { width: 7px; height: 7px; border-radius: 50%; background: #d9d7d2; }
+  .chrome i:nth-child(1) { background: #e7a39b; }
+  .chrome i:nth-child(2) { background: #e8c98f; }
+  .chrome i:nth-child(3) { background: #9fc7a9; }
+  .chrome span { margin-left: 6px; font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #8d8a84; letter-spacing: .02em; }
+  .screen { position: absolute; left: 0; right: 0; top: 30px; bottom: 0; overflow: hidden; background: #fff; }
+  #app { position: absolute; left: 0; top: 0; width: 1280px; height: 900px; border: 0; transform-origin: 0 0; background: #fff; }
+  .fade { position: absolute; top: 30px; bottom: 0; width: 52px; z-index: 4; pointer-events: none; opacity: 0; }
+  .fade.left { left: 0; background: linear-gradient(90deg, #fff, rgba(255,255,255,0)); }
+  .fade.right { right: 0; background: linear-gradient(270deg, #fff, rgba(255,255,255,0)); }
+  .window.crop .fade { opacity: 1; }
+
+  .copy { position: absolute; left: 72px; top: 96px; width: 460px; z-index: 3; opacity: 0; }
+  .copy .kicker { display: flex; align-items: center; gap: 9px; font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
+  .copy .kicker::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .copy h1 { margin: 18px 0 18px; font-size: 64px; line-height: 1.04; font-weight: 600; letter-spacing: -.045em; }
+  .copy h1 em { color: var(--accent); font-style: normal; }
+  .copy p { margin: 0; max-width: 390px; font-size: 22px; line-height: 1.55; color: var(--muted); }
+  .copy.dark h1 { color: #f7f5ef; }
+  .copy.dark p { color: rgba(247,245,239,.62); }
+  .copy.light h1 { color: var(--ink); }
+  .copy.light p { color: var(--muted); }
+  .copy.compact { width: 400px; }
+  .copy.compact h1 { font-size: 46px; }
+  .copy.compact p { font-size: 20px; }
+
+  #end {
+    position: absolute; inset: 0; display: grid; place-content: center; text-align: center; opacity: 0;
+    color: #f7f5ef; z-index: 4;
+  }
+  #end .logo { width: 54px; height: 54px; margin: 0 auto 20px; display: block; }
+  #end .mark { font-size: 58px; font-weight: 700; letter-spacing: -.045em; }
+  #end p { margin: 22px 0 10px; font-size: 30px; line-height: 1.35; color: rgba(247,245,239,.84); }
+  #end span { font-size: 17px; color: rgba(247,245,239,.48); letter-spacing: .04em; }
+  #veil { position: absolute; inset: 0; background: #101010; opacity: 0; z-index: 3; pointer-events: none; }
+  .tag { position: absolute; left: 72px; bottom: 64px; display: flex; align-items: center; gap: 9px; padding: 11px 15px;
+    border-radius: 999px; background: rgba(255,255,255,.92); box-shadow: 0 12px 34px rgba(0,0,0,.14), 0 0 0 1px rgba(0,0,0,.07);
+    font: 500 13px/1 "Inter", "Noto Sans SC", sans-serif; letter-spacing: .01em; color: #333; opacity: 0; z-index: 4; }
+  .tag i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .tag.dark { background: rgba(16,16,16,.72); color: rgba(247,245,239,.82); box-shadow: 0 12px 34px rgba(0,0,0,.3), 0 0 0 1px rgba(255,255,255,.12); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="window" id="window">
+    <div class="chrome"><i></i><i></i><i></i><span>product / demo</span></div>
+    <div class="screen"><iframe id="app" title="产品原型"></iframe></div>
+    <div class="fade left"></div><div class="fade right"></div>
+  </div>
+
+  <div class="copy dark" id="copy">
+    <div class="kicker" id="kicker">BUILDERHARNESS</div>
+    <h1 id="headline">发布前，<br>先看见<em>偏差</em>。</h1>
+    <p id="sub">需求、页面、源码，放在同一条线上。</p>
+  </div>
+
+  <div class="tag" id="tag"><i></i><span id="tagText"></span></div>
+
+  <div id="end">
+    <img class="logo" id="endLogo" src="./assets/logo.svg" alt="">
+    <div class="mark" id="endMark">BuilderHarness</div>
+    <p id="endLine">让每一次产品迭代，都有据可依。</p>
+    <span id="endMeta">需求 · 页面 · 源码 · 复核</span>
+  </div>
+
+  <div id="veil"></div>
+</div>
+<script type="module" src="./film.js"></script>
+</body>
+</html>

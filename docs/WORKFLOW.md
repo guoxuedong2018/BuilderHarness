@@ -136,3 +136,11 @@ npx builderharness kb-publish --dry-run --root <id> --doc-base <url>
 - Agent 可以读源码、跑检查、写 Markdown、重建媒体、提出发布计划。
 - **人确认**需求状态、内容锁、发布目标和外发范围。
 - 任何命令都先在仓库内产出差异；不要用一次性脚本改运行时状态。
+
+
+## 验收与发布入口
+
+`builderharness verify <KEY>` 执行并记录 AC 对应的场景。原型评审工具栏的待决清单
+接受产品决定，Agent 回写 README 与 FRS 后关闭。构建扫描走 `builderharness preflight`，
+预览托管与宣贯媒体分别走 `deploy`、`promo`。字段、命令与可运行样例见
+[原型工作流](prototype-workflow.md)。

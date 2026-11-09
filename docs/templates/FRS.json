@@ -42,10 +42,12 @@
       "clip": "CSS 选择器，截这一块；省略则截整个视口"
     }
   },
+  "components": { "route": "/ui-spec", "items": [] },
   "acceptance": [
     "AC1: "
   ],
   "verification": [],
+  "decisionRefs": {},
   "openQuestions": [
     "问题描述 — 为什么重要 — 建议谁来确认"
   ],

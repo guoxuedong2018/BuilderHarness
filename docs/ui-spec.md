@@ -137,3 +137,11 @@ reference implementation.
 3. Add or change a component recipe in `UI-SPEC.md` before changing both
    implementations.
 4. Run `npm run check` and the demo (`npm run demo`).
+
+### Framework-neutral table and editor logic
+
+Import `createSelection`, `facetsOf` or `locate` from `builderharness/ui-data`.
+Keep selection by stable IDs and apply select/deselect events to the current page.
+`facetsOf` takes field definitions and a set of rows, returns filtered rows and counts
+for enum values, and supports numeric/date ranges and text. `locate` tracks the
+container, array position and key around the caret before JSON is complete.

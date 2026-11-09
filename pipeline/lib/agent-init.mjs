@@ -11,6 +11,16 @@ async function exists(file) {
   try { await fs.lstat(file); return true; } catch (error) { if (error.code === "ENOENT") return false; throw error; }
 }
 
+async function skillFiles(root, rel = "") {
+  const files = [];
+  for (const entry of await fs.readdir(path.join(root, rel), { withFileTypes: true })) {
+    const file = path.posix.join(rel, entry.name);
+    if (entry.isDirectory()) files.push(...await skillFiles(root, file));
+    else if (entry.isFile() && /\.(?:md|json)$/.test(entry.name)) files.push(file);
+  }
+  return files.sort();
+}
+
 async function safe(root, rel) {
   let current = root;
   for (const part of rel.split("/")) {
@@ -57,22 +67,44 @@ function owned(text) {
 }
 
 /** Add/remove only verifiably owned material. No model, subprocess or application changes. */
-export async function initializeAgent({ root, kitRoot, agent, remove = false, dryRun = false }) {
-  if (agent && !["codex", "claude", "both"].includes(agent)) throw new Error("--agent must be codex, claude or both");
+export async function initializeAgent({ root, kitRoot, agent, prototype = false, remove = false, dryRun = false }) {
+  if (agent && !["codex", "claude", "cursor", "both", "all"].includes(agent)) throw new Error("--agent must be codex, claude, cursor, both or all");
   if (!dryRun) await fs.mkdir(root, { recursive: true });
   root = path.resolve(root);
   if (await exists(root)) root = await fs.realpath(root);
   const hasCodex = await exists(path.join(root, "AGENTS.md")) || (remove && await exists(path.join(root, ".agents/skills/builderharness-review/SKILL.md")));
   const hasClaude = await exists(path.join(root, "CLAUDE.md")) || (remove && await exists(path.join(root, ".claude/skills/builderharness-review/SKILL.md")));
-  const hosts = agent === "both" ? ["codex", "claude"] : agent ? [agent]
-    : hasCodex || hasClaude ? [...(hasCodex ? ["codex"] : []), ...(hasClaude ? ["claude"] : [])] : ["codex", "claude"];
-  const skill = await fs.readFile(path.join(kitRoot, "scaffold", ".agent", "skills", "requirement-review", "SKILL.md"), "utf8");
+  const cursorRule = ".cursor/rules/builderharness.mdc";
+  const hasCursor = await exists(path.join(root, cursorRule)) || (!remove && await exists(path.join(root, ".cursor")));
+  const available = { codex: hasCodex, claude: hasClaude, cursor: hasCursor };
+  const detected = Object.keys(available).filter((host) => available[host]);
+  const hosts = agent === "all" ? Object.keys(available) : agent === "both" ? ["codex", "claude"]
+    : agent ? [agent] : detected.length ? detected : ["codex", "claude"];
+  const skillRoot = path.join(kitRoot, "scaffold", ".agent", "skills");
   const workflow = await fs.readFile(path.join(kitRoot, "scaffold", "agent-workflow.md"), "utf8");
-  const otherHostRemains = remove && ["codex", "claude"].some((host) => !hosts.includes(host) && (host === "codex" ? hasCodex : hasClaude));
+  const otherHostRemains = remove && detected.some((host) => !hosts.includes(host));
   const plans = [];
   for (const host of hosts) {
-    plans.push({ file: host === "codex" ? "AGENTS.md" : "CLAUDE.md", instruction: true });
-    plans.push({ file: `${host === "codex" ? ".agents" : ".claude"}/skills/builderharness-review/SKILL.md`, body: skill.replace(/^name: requirement-review$/m, "name: builderharness-review") });
+    if (host === "cursor") {
+      plans.push({ file: cursorRule, body: [
+        "---", "description: BuilderHarness product and prototype workflow", "alwaysApply: true", "---", "",
+        "Read docs/builderharness/WORKFLOW.md. Use the builderharness-review skill when judging product changes.",
+        "Use builderharness-product-design-review when installed for M/L design review. Preserve host rules and permissions.", "",
+      ].join("\n") });
+    } else plans.push({ file: host === "codex" ? "AGENTS.md" : "CLAUDE.md", instruction: true });
+    const dir = `${{ codex: ".agents", claude: ".claude", cursor: ".cursor" }[host]}/skills`;
+    const withPrototype = prototype || remove || await exists(path.join(root, dir, "builderharness-ui-prototype/SKILL.md"));
+    const names = withPrototype
+      ? ["requirement-review", "product-design-review", "prd-author", "ui-prototype", "frontend-quality", "review-local", "prd-publish", "deploy-prototype", "content-draft", "feature-promo"]
+      : ["requirement-review"];
+    for (const name of names) {
+      const installed = name === "requirement-review" ? "builderharness-review" : `builderharness-${name}`;
+      const source = path.join(skillRoot, name);
+      for (const file of await skillFiles(source)) {
+        const body = await fs.readFile(path.join(source, file), "utf8");
+        plans.push({ file: `${dir}/${installed}/${file}`, body: file === "SKILL.md" ? body.replace(/^name: .*$/m, `name: ${installed}`) : body });
+      }
+    }
   }
   if (!otherHostRemains) plans.push({ file: "docs/builderharness/WORKFLOW.md", body: workflow });
   const changes = [];

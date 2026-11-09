@@ -25,25 +25,30 @@
  *   pending-images.json  追到文末、还没挪进正文的临时图（发到一半失败时留下），下次一并删
  */
 
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { PRD_METHODS, loadPublishGateway } from "./lib/publish-gateway.mjs";
+import { PRD_METHODS, loadPublishGateway, publishDestinationInfo } from "./lib/publish-gateway.mjs";
 import { compareMedia, storeBlob } from "./lib/media-ledger.mjs";
-import { FEATURES_DIR, KB_DIR, PIPELINE_DIR, PRD_DIR, REPO_ROOT } from "./lib/paths.mjs";
+import { FEATURES_DIR, KB_DIR, PIPELINE_DIR, PRD_DIR, PROJECT_CONFIG, REPO_ROOT } from "./lib/paths.mjs";
+import { readEnv } from "./lib/env.mjs";
+import { sourcesForRoute } from "./lib/route-source.mjs";
+import { currentHashes } from "./lib/source-snapshot.mjs";
 import { alignImages } from "./prd-images.mjs";
 import { batchOps, cloudEdits, cloudEditsReport, nextBase, paraText, patchOps, proseTexts, tableParagraphs } from "./prd-patch-ops.mjs";
 
-const DEV = "http://localhost:5273/";
+const DEV = readEnv("BASE_URL") || PROJECT_CONFIG.baseUrl || "http://localhost:5273/";
 const SECTIONS = ["需求背景", "需求描述", "方案设计", "功能点规则描述"];
 
 const argv = process.argv.slice(2);
-const VALUE_FLAGS = ["--scope", "--folder"];
+const VALUE_FLAGS = ["--scope", "--folder", "--plan"];
 const key = argv.find((a, i) => !a.startsWith("-") && !VALUE_FLAGS.includes(argv[i - 1]));
 const scope = argv.includes("--scope") ? argv[argv.indexOf("--scope") + 1] : "all";
 const folder = argv.includes("--folder") ? argv[argv.indexOf("--folder") + 1] : null;
 const yes = argv.includes("--yes");
+const approved = argv.includes("--plan") ? argv[argv.indexOf("--plan") + 1] : null;
 const rewrite = argv.includes("--rewrite");
 const absorb = argv.includes("--absorb");
 const redline = argv.includes("--redline");
@@ -68,7 +73,9 @@ async function ensureDev() {
 }
 
 async function main() {
-  if (!key) stop("用法：npx builderharness prd <FEATURE_KEY> [--scope delta] [--yes] [--absorb] [--redline] [--rewrite] [--folder <目录 id>]");
+  if (!key || !/^[A-Za-z0-9_-]+$/.test(key)) stop("用法：npx builderharness prd <FEATURE_KEY> [--scope delta] [--yes] [--absorb] [--redline] [--rewrite] [--folder <目录 id>]");
+  if (argv.includes("--plan") && (!yes || !/^[a-f0-9]{64}$/.test(approved ?? ""))) stop("--plan requires --yes and a valid plan ID");
+  if (yes && PROJECT_CONFIG.requirePrdPlan && !approved) stop("Generate and review a PRD plan before publishing; pass --yes --plan <ID>");
   if (folder !== null && (!folder || folder.startsWith("-"))) stop("--folder 后面要跟目标端的目录 id");
   if (!["all", "delta"].includes(scope)) stop(`--scope 只接受 all 或 delta，收到「${scope}」`);
   const frsFile = path.join(FEATURES_DIR, key, "FRS.json");
@@ -81,20 +88,39 @@ async function main() {
   if (redline && (rewrite || !docId)) stop("--redline 只用于更新已发布的 PRD，不和 --rewrite 一起用");
 
   // ── 1 校验、渲染、截图 ──────────────────────────────────────────
-  let r = node("check-frs.mjs", []);
+  let r = node("verify.mjs", [key, "--status"]);
+  if (r.status !== 0) stop(`需求验收或待决清单仍有阻断项：\n${tail(r)}`);
+  r = node("check-frs.mjs", []);
   if (r.status !== 0) stop(`需求件套校验没过（PRD 会带着错的验收编号或不存在的页面）：\n${tail(r)}`);
   r = node("export-frs-prd.mjs", [key, "--scope", scope]);
   if (r.status !== 0) stop(`渲染失败：\n${tail(r)}`);
   const made = r.stdout.match(/已生成 .*?：(.+)/)?.[1] ?? "";
   const shots = JSON.parse(await fs.readFile(path.join(outDir, "shots.json"), "utf8"));
-  if (shots.order.length) {
+  if (shots.order.length && !approved) {
     await ensureDev();
-    r = node("capture-shots.mjs", [key, ...shots.order.flatMap((k) => ["--only", k])]);
+    r = node("capture-shots.mjs", [key, "--base-url", DEV, ...shots.order.flatMap((k) => ["--only", k])]);
     if (r.status !== 0) stop(`截图没成功：\n${tail(r)}`);
     for (const line of r.stdout.split("\n").filter((l) => /⚠|宽高比|点不开/.test(l))) console.log(`  ${line.trim()}`);
   }
   // 每一版截图存进内容寻址缓存（与知识库共用），下次才比得了画面
+  const listIds = new Map();
+  const rendered = JSON.stringify(await readJson(path.join(outDir, "ops.json"), null), (key, value) => {
+    // The destination wants fresh list identifiers, which do not change the reviewed content.
+    if (key !== "listId") return value;
+    if (!listIds.has(value)) listIds.set(value, listIds.size + 1);
+    return listIds.get(value);
+  });
+  const sourceFiles = new Set();
+  for (const shot of shots.order) {
+    const route = frs.shots?.[shot]?.route;
+    if (!route) continue;
+    const files = await sourcesForRoute(REPO_ROOT, route).catch(() => []);
+    if (!files.length && (approved || PROJECT_CONFIG.requirePrdPlan)) stop(`缺少 ${route} 的源码依赖，无法绑定配图版本`);
+    for (const file of files) sourceFiles.add(file);
+  }
+  const sources = await currentHashes(REPO_ROOT, [...sourceFiles].sort());
   const hashes = Object.fromEntries(await Promise.all(shots.order.map(async (k, i) => [k, await storeBlob(path.relative(KB_DIR, shots.files[i]))])));
+  if (Object.values(hashes).some((hash) => !hash)) stop("配图缺失，请重新生成 PRD 计划");
 
   // 已上传过、画面没变、而且属于这篇文档的 imageId 可以复用（imageId 以文档 docId 结尾，换一篇就不能用）。
   // 画面没变不等于字节相同：抽屉、浮层这类截图每拍一次字节都不一样，按 16×16 格比灰度才认得出（compareMedia）。
@@ -125,7 +151,8 @@ async function main() {
   if (!docId || rewrite) {
     if (docId) console.log("  整篇覆盖：目标端有人改过的内容会一起没掉");
     else console.log(folder ? `  建在目标端目录 ${folder} 下，权限随这个目录` : "  新文档默认只有你自己能看，分享范围在目标端设");
-    if (!yes) return plan();
+    const revision = docId ? (await gateway.fetchJsonml(docId)).version : null;
+    if (!checkPlan(revision)) return;
     return publishWhole();
   }
 
@@ -177,13 +204,21 @@ async function main() {
   const strays = topLevel(cloud.body).filter((b) => isTemp(b));
   if (strays.length) console.log(`  文末有 ${strays.length} 段上次追图留下的临时图，这次一并删掉`);
   if (!change && !insert && !del && !unmark && !toUpload.length && !strays.length) return console.log("\n✓ 功能点表和目标端一致，没有要发的");
-  if (!yes) return plan();
+  if (!checkPlan(cloud.version)) return;
   return publishPatch();
 
   // ── 3 外发 ─────────────────────────────────────────────────────
 
-  function plan() {
-    console.log("\n这次没有写目标端。确认密级与分享范围、看过上面的改动后，加 --yes 再跑一次");
+  function checkPlan(revision) {
+    const destination = publishDestinationInfo(gateway);
+    const adapter = readEnv("PUBLISH_GATEWAY") || readEnv("PUBLISH_DESTINATION") || "docs-cli";
+    const id = createHash("sha256").update(JSON.stringify({
+      key, docId, folder, revision, destination, adapter, scope, absorb, redline, rewrite, rendered, sources, hashes,
+    })).digest("hex");
+    if (approved && approved !== id) stop("PRD、配图或目标端版本已变更，请重新出计划并确认");
+    if (yes) return true;
+    console.log(`\n这次没有写目标端。核对目标、密级与分享范围后运行 --yes --plan ${id}`);
+    return false;
   }
 
   function intent() {
@@ -277,7 +312,8 @@ async function main() {
   async function finish(target, url, ids, sent = null) {
     step("回读核对");
     const outline = (await gateway.fetchOutline(target)).map((i) => i.text ?? "");
-    const lost = SECTIONS.filter((s) => !outline.some((t) => t.includes(s)));
+    const sections = [...SECTIONS, ...(frs.components?.items?.length ? ["通用组件抽象说明"] : [])];
+    const lost = sections.filter((s) => !outline.some((t) => t.includes(s)));
     const after = await gateway.fetchJsonml(target);
     const used = tableParagraphs(after.body).flatMap(imagesIn);
     const foreign = used.filter((id) => !id.endsWith(target));

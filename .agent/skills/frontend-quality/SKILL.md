@@ -27,3 +27,9 @@ npx builderharness check-frs <KEY>   # 有需求件套时
 ## 输出
 
 汇报实际跑了什么、结果、没覆盖的部分。不要只写「已检查」。
+
+## 验收证据
+
+有 FRS 的行为变更把主路径和一个关键反例或恢复路径写成关联 AC 的 `FRS.verification` 场景。
+运行 `builderharness verify <KEY>`，将结果和证据位置写进验收记录。用 `--status` 回看是否
+仍对应当前输入。保留人工走查的实际结果，区分未运行、跳过、失败和通过。

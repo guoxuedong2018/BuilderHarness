@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from "node:readline";
 
+import { runKit } from "./kit.mjs";
 import { readEnv } from "./env.mjs";
 import { readContext, readOpenReviews, readPublishPlan, readStatus } from "./project.mjs";
 
@@ -51,6 +52,16 @@ const TOOLS = [
     },
   },
   {
+    name: "builderharness_decisions",
+    description: "Read a feature's pending decision groups, options, version and submission status.",
+    inputSchema: { type: "object", properties: { root: ROOT_SCHEMA, feature: { type: "string" } }, additionalProperties: false },
+  },
+  {
+    name: "builderharness_verification",
+    description: "Read recorded AC verification and its stale or blocking state. Does not start a browser or run checks.",
+    inputSchema: { type: "object", properties: { root: ROOT_SCHEMA, feature: { type: "string" } }, required: ["feature"], additionalProperties: false },
+  },
+  {
     name: "builderharness_publish_plan",
     description:
       "Show the local-to-destination publishing plan: configured destination, previously published pages, and pages that have never been published.",
@@ -80,6 +91,14 @@ async function callTool(name, args = {}) {
   if (name === "builderharness_context") return readContext(root, args);
   if (name === "builderharness_review_open") return readOpenReviews(root);
   if (name === "builderharness_publish_plan") return readPublishPlan(root);
+  if (name === "builderharness_decisions" || name === "builderharness_verification") {
+    const feature = args.feature;
+    if ((feature != null || name === "builderharness_verification") &&
+        (typeof feature !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_-]*$/.test(feature))) throw new Error("A valid feature key is required");
+    const cmd = name === "builderharness_decisions" ? ["review", "decisions", ...(feature ? [feature] : [])]
+      : ["verify", feature, "--status", "--report-only", "--json"];
+    return JSON.parse((await runKit(root, cmd)).stdout);
+  }
   throw new Error(`Unknown tool: ${name}`);
 }
 

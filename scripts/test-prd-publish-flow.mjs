@@ -128,7 +128,9 @@ test("prd: publish, human edits, redline, rerun, finalize, absorb", async () => 
   try {
     // 1. 首发：建在给定目录下，整篇写入，回写 prdDocId
     await writeFrs(["实验列表按状态筛选：运行中、待评审、已通过、失败", "导出按钮在列表为空时置灰", "评审人只能看到分配给自己的实验"]);
-    const first = prd(dir, "--yes", "--folder", "team-folder");
+    const firstPlan = prd(dir, "--folder", "team-folder").match(/--plan ([0-9a-f]{64})/)?.[1];
+    assert.ok(firstPlan);
+    const first = prd(dir, "--yes", "--plan", firstPlan, "--folder", "team-folder");
     assert.match(first, /已发布/);
     const doc = await docOf(dir);
     assert.equal(doc.folderId, "team-folder");

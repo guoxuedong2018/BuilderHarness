@@ -32,6 +32,9 @@
           ],
           "permission": [
             "Any workspace member can review."
+          ],
+          "ac": [
+            "AC1"
           ]
         }
       ]

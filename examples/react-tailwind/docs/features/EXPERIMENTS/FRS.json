@@ -1,43 +1,132 @@
 {
   "key": "EXPERIMENTS",
-  "title": "Experiments",
+  "title": "Save a draft experiment",
   "status": "confirmed",
+  "goal": "Create a synthetic draft experiment and find it after reloading the list.",
+  "scope": {
+    "include": [
+      "Save, list and reload a draft"
+    ],
+    "exclude": [
+      "Remote services"
+    ]
+  },
   "prototype": {
     "entryRoute": "/experiments"
-  },
-  "background": {
-    "problem": [
-      "Runs are scattered across tools."
-    ],
-    "solution": [
-      "A single list with status, score and review trail."
-    ]
   },
   "spec": [
     {
       "group": "Experiments",
       "route": "/experiments",
+      "shots": [
+        "experiments"
+      ],
       "points": [
         {
           "id": "FP1",
-          "name": "Experiments can be filtered by state.",
+          "name": "Draft creation",
+          "origin": "new",
           "display": [
-            "Experiments can be filtered by state."
+            "Created drafts are visible in the list."
           ],
           "interaction": [
-            "The surface updates without a reload."
+            "A valid name creates a local draft. An empty name leaves the dialog open for correction."
           ],
-          "value": [
-            "The result is visible in the review queue."
-          ],
-          "permission": [
-            "Any workspace member can review."
+          "ac": [
+            "AC1",
+            "AC2"
           ]
         }
       ]
     }
   ],
   "acceptance": [
-    "AC1 The surface renders with synthetic data."
-  ]
+    "AC1: A created draft is visible in the list after a reload.",
+    "AC2: Empty name displays an error and allows correction."
+  ],
+  "verification": [
+    {
+      "id": "save-and-reload",
+      "ac": [
+        "AC1"
+      ],
+      "required": true,
+      "route": "/experiments",
+      "steps": [
+        {
+          "click": "text=New experiment"
+        },
+        {
+          "expect": "#experiment-name"
+        },
+        {
+          "fill": {
+            "selector": "#experiment-name",
+            "text": "Synthetic saved draft"
+          }
+        },
+        {
+          "click": "text=Create experiment"
+        },
+        {
+          "expect": "text=Synthetic saved draft"
+        },
+        {
+          "reload": true
+        },
+        {
+          "expect": "text=Synthetic saved draft"
+        }
+      ]
+    },
+    {
+      "id": "empty-name-recovery",
+      "ac": [
+        "AC2"
+      ],
+      "required": true,
+      "route": "/experiments",
+      "steps": [
+        {
+          "click": "text=New experiment"
+        },
+        {
+          "expect": "#experiment-name"
+        },
+        {
+          "click": "text=Create experiment"
+        },
+        {
+          "expect": "text=Give the experiment a name so the team can find it later."
+        },
+        {
+          "fill": {
+            "selector": "#experiment-name",
+            "text": "Synthetic recovered draft"
+          }
+        },
+        {
+          "click": "text=Create experiment"
+        },
+        {
+          "expect": "text=Synthetic recovered draft"
+        }
+      ]
+    }
+  ],
+  "shots": {
+    "experiments": {
+      "route": "/experiments",
+      "caption": "Experiment list with synthetic data"
+    }
+  },
+  "openQuestions": [],
+  "background": {
+    "problem": [
+      "The draft disappears when the workspace reloads."
+    ],
+    "solution": [
+      "Persist the synthetic draft and show it in the experiment list."
+    ]
+  }
 }

@@ -16,6 +16,8 @@
  */
 
 import { promises as fs } from "node:fs";
+import { prototypeUrl } from "./lib/prototype-url.mjs";
+import { PROJECT_CONFIG } from "./lib/paths.mjs";
 import path from "node:path";
 import { FEATURES_DIR, REPO_ROOT } from "./lib/paths.mjs";
 
@@ -40,7 +42,7 @@ import {
   waitFor,
 } from "./lib/cdp.mjs";
 
-const DEFAULT_BASE_URL = "http://localhost:5273";
+const DEFAULT_BASE_URL = process.env.BUILDERHARNESS_BASE_URL || PROJECT_CONFIG.baseUrl || "http://localhost:5273";
 const VIEWPORT = { width: 1680, height: 1050, scale: 2 };
 /** 等页面稳定的宽限，iView 的下拉与弹窗都有过渡动画 */
 const SETTLE_MS = 450;
@@ -72,7 +74,7 @@ function parseArgs(argv) {
 async function probe(baseUrl, route, headed) {
   const browser = await launch({ headless: !headed, viewport: VIEWPORT });
   const { session } = browser;
-  await goto(session, `${baseUrl.replace(/\/$/, "")}/?probe=1#${route}`);
+  await goto(session, prototypeUrl(baseUrl, route, { probe: 1 }));
   await installHelpers(session);
   await sleep(800);
 
@@ -143,7 +145,7 @@ async function capture(session, key, def, { baseUrl, outDir, nonce }) {
   // 路由是 hash 模式，链接必须带 #。
   // nonce 加在 hash 之前：只改 hash 的导航不会重新加载文档，页面状态会从上一张
   // 截图漏过来（前一张勾了 20 行，这一张点表头复选框反而把它取消）。
-  await goto(session, `${baseUrl.replace(/\/$/, "")}/?shot=${nonce}#${def.route}`);
+  await goto(session, prototypeUrl(baseUrl, def.route, { shot: nonce }));
   await installHelpers(session);
   // 套件自己的评审层（.bk-root）浮在产品之上：贴边或加宽的浮层会被工具栏压出一块
   await evaluate(session, `(() => { const s = document.createElement('style'); s.textContent = '.bk-root{display:none!important;}'; document.head.appendChild(s); })()`);

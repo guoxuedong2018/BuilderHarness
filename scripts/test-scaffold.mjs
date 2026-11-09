@@ -24,10 +24,11 @@ try {
   assert.match(list, /docs\/templates\/FRS\.json/);
   assert.match(list, /\.agent\/skills\/prd-author\/SKILL\.md/);
   assert.match(list, /\.agent\/skills\/requirement-review\/references\/design-brief\.md/);
+  assert.match(list, /feature-promo\/SKILL\.md/);
   assert.doesNotMatch(list, /scaffold\/README\.md/);
 
   const first = init([]);
-  assert.match(first, /复制 29 个/);
+  assert.match(first, /复制 43 个/);
   const frs = await fs.readFile(path.join(tmp, "docs", "templates", "FRS.json"), "utf8");
   assert.equal(JSON.parse(frs).key, "MMDDHHMM_MODULE_NAME");
   assert.ok(await fs.stat(path.join(tmp, "AGENTS.md")));
@@ -36,7 +37,7 @@ try {
 
   await fs.writeFile(path.join(tmp, "docs", "templates", "FRS.json"), "keep me");
   const second = init([]);
-  assert.match(second, /跳过已存在 29 个/);
+  assert.match(second, /跳过已存在 43 个/);
   assert.equal(await fs.readFile(path.join(tmp, "docs", "templates", "FRS.json"), "utf8"), "keep me");
 
   init(["--force", "--only", "docs/templates"]);
