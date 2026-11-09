@@ -168,15 +168,24 @@ export function runShell(line, options) {
 /** A long-running service in its own process group, stopped with `stop()`. */
 export function startService(line, { cwd, env, logFile }) {
   const log = fs.createWriteStream(logFile);
-  const child = spawn("/bin/sh", ["-c", line], { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+  const [command, ...args] = Array.isArray(line) ? line : process.platform === "win32"
+    ? [process.env.ComSpec || "cmd.exe", "/d", "/s", "/c", line] : ["/bin/sh", "-c", line];
+  const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
   if (child.pid) track(child);
   child.stdout.pipe(log, { end: false });
   child.stderr.pipe(log, { end: false });
   let exited = null;
-  const exitPromise = new Promise((resolve) => child.once("exit", (code, signal) => {
-    exited = { code, signal };
-    resolve(exited);
-  }));
+  const exitPromise = new Promise((resolve) => {
+    child.once("exit", (code, signal) => {
+      exited = { code, signal };
+      resolve(exited);
+    });
+    child.once("error", (error) => {
+      log.write(error.message + "\n");
+      exited = { error: error.message };
+      resolve(exited);
+    });
+  });
   return {
     get exited() {
       return exited;

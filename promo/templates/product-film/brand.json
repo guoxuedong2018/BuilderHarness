@@ -1,0 +1,17 @@
+{
+  "name": "BuilderHarness",
+  "tagline": "让每一次产品迭代，都有据可依。",
+  "meta": "需求 · 页面 · 源码 · 复核",
+  "logo": "assets/logo.svg",
+  "colors": {
+    "ink": "#171717",
+    "paper": "#f2efe8",
+    "dark": "#101010",
+    "accent": "#e86a33",
+    "muted": "#6b6b6b"
+  },
+  "fonts": {
+    "display": "Inter",
+    "text": "Noto Sans SC"
+  }
+}

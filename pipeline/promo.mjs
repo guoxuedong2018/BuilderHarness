@@ -38,6 +38,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import * as promoTools from "./lib/promo-tools.mjs";
 import { adapterName } from "./lib/adapter.mjs";
 import { readEnv } from "./lib/env.mjs";
 
@@ -137,7 +138,19 @@ async function installInputBridge(session) {
 }
 
 /** GIF 直接从成片出：gifski 自己读 MP4（按 fps 重采样），不落任何临时帧；超体积先降质量、再缩宽 */
-async function gifFromMp4(mp4, file, { fps, width, maxMb }) {
+async function gifFromMp4(mp4, file, { fps, width, maxMb, encoder }) {
+  if (![fps, width, maxMb].every((value) => Number.isFinite(value) && value > 0)) throw new Error("Invalid GIF fps, width or size");
+  if (encoder === "ffmpeg") {
+    let size;
+    for (const ratio of [1, 0.85, 0.7, 0.55, 0.45]) {
+      const w = Math.max(2, Math.round(width * ratio / 2) * 2);
+      const filter = `fps=${fps},scale=${w}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer`;
+      await run("ffmpeg", ["-y", "-i", mp4, "-filter_complex_threads", "1", "-filter_complex", filter, "-loop", "0", file]);
+      size = (await fs.stat(file)).size;
+      if (size <= maxMb * 1024 * 1024) return { size, width: w };
+    }
+    return { size, over: true };
+  }
   let w = width;
   // 运动质量始终拉满、只降色彩质量：淡出的标注、退场的窗口在静止背景上留「鬼影」，就是 gifski 降运动质量时复用了上一帧的像素
   // （2026-10-28 评审；11-05 独立评审在质量 90 的 view.gif 上又看到一次）
@@ -166,7 +179,7 @@ async function fingerprint(dir, { routes, features, options, files }) {
     }
   };
   await collect(dir, ["out"]);
-  await collect(path.join(KIT_ROOT, "promo"));
+  await collect(path.join(KIT_ROOT, "promo"), ["templates"]);
   for (const key of features) {
     inputs.add(path.join(FEATURES_DIR, key, "FRS.json"));
     await collect(path.join(FEATURES_DIR, key, "fixtures"));
@@ -230,7 +243,10 @@ async function renderOne(session, url, { prefix, dir, outDir, args, filmOnly, lo
   const P = await evaluate(session, "window.PROMO");
   const routes = await evaluate(session, "window.__promoRoutes || []");
   const features = await evaluate(session, "window.__promoFeatures || []");
-  const options = { width: P.width, height: P.height, duration: P.duration, fps: P.fps || 30,
+  const preferredEncoder = args["gif-encoder"] ?? "auto";
+  const gifEncoder = preferredEncoder === "auto" ? (promoTools.hasGifski() ? "gifski" : "ffmpeg") : preferredEncoder;
+  if (!["gifski", "ffmpeg"].includes(gifEncoder)) throw new Error("Choose --gif-encoder auto, gifski or ffmpeg");
+  const options = { gifEncoder, width: P.width, height: P.height, duration: P.duration, fps: P.fps || 30,
     scale: Number(args.scale || P.scale || 1.5), gifWidth: args["gif-width"] || P.gifWidth,
     gifFps: args["gif-fps"] || P.gifFps, maxMb: args["max-mb"] || P.maxMb, synthetic: Boolean(args.synthetic),
     adapter: adapterName() };
@@ -302,7 +318,7 @@ async function renderOne(session, url, { prefix, dir, outDir, args, filmOnly, lo
     const width = Number(args["gif-width"] || P.gifWidth || 960);
     const maxMb = Number(args["max-mb"] || P.maxMb || 5);
     const gifFps = Number(args["gif-fps"] || P.gifFps || 15);
-    const fit = await gifFromMp4(mp4, gif, { fps: gifFps, width, maxMb });
+    const fit = await gifFromMp4(mp4, gif, { fps: gifFps, width, maxMb, encoder: gifEncoder });
     if (fit.over) throw new Error(`${prefix}.gif exceeds ${maxMb} MiB after encoding; shorten the scene or lower its GIF dimensions`);
     outputs.push(`${prefix}.gif ${mb(fit.size)} MiB (${fit.width}px, ${gifFps} fps)`);
   }
@@ -488,23 +504,33 @@ async function status(_target, args) {
 
 // ── main ───────────────────────────────────────────────────────────
 
-const COMMANDS = { render, status };
+const COMMANDS = {
+  render, status, init: promoTools.init, doctor: promoTools.doctor, sound: promoTools.sound,
+  capture: (dir, args) => promoTools.capture(dir, args, DEFAULT_BASE_URL),
+};
 const args = parseArgs(process.argv.slice(2));
 const [command, target] = args._;
-const allowedOptions = new Set(["_", "help", "base", "scene", "stills", "only", "scale", "gif-width", "gif-fps", "max-mb", "jobs", "synthetic", "json"]);
+const allowedOptions = new Set(["_", "help", "base", "scene", "stills", "only", "scale", "gif-width", "gif-fps", "max-mb", "jobs", "synthetic", "json", "gif-encoder", "template", "allow-external", "video", "out", "audio-only", "config"]);
 if (Object.keys(args).some((arg) => !allowedOptions.has(arg)) || (args.only && !["mp4", "stills"].includes(args.only))) {
   console.error("Unknown promo flag or invalid --only value");
   process.exit(2);
 }
 if (!command || args.help || command === "help") {
-  console.log("builderharness promo render <docs/promo/KEY> [--base URL] [--scene ID] [--only stills|mp4] [--stills 0,2] | status [--json]");
+  console.log(`builderharness promo
+  init <KEY> [--template scene|product-film]
+  render <docs/promo/KEY> [--base URL] [--scene ID] [--only stills|mp4] [--stills 0,2]
+  capture <docs/promo/KEY> [--allow-external]
+  sound <docs/promo/KEY> [--video FILE] [--config FILE] [--out FILE] [--audio-only]
+  doctor [--json]
+  status [--json]`);
   process.exit(0);
 }
-if (!Object.hasOwn(COMMANDS, command) || (command !== "status" && !target)) {
+if (!Object.hasOwn(COMMANDS, command) || (!["status", "doctor"].includes(command) && !target)) {
   console.error("用法：builderharness promo render <物料目录>  |  status");
   process.exit(1);
 }
-const dir = target ? path.resolve(target) : null;
+const dir = target ? command === "init" && /^[A-Za-z0-9_-]+$/.test(target)
+  ? path.join(PROMO_DIR, target) : path.resolve(target) : null;
 if (dir && (path.dirname(dir) !== PROMO_DIR || !/^[A-Za-z0-9_-]+$/.test(path.basename(dir)))) {
   console.error(`Recipe must be a direct child of ${rel(PROMO_DIR)}`);
   process.exit(2);

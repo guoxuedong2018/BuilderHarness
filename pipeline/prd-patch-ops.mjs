@@ -243,17 +243,26 @@ export function patchOps({ localBody, cloudBody, base = null, redline = false })
   const cloudAll = new Set(tableParagraphs(cloudBody).map(paraText));
   const deletedInCloud = (t) => published && published.has(t) && !cloudAll.has(t);
 
-  // 两边表格行列一样时逐格比对：插入只锚在同一格里的段落上，不会把规则插进参考图那一格
-  //（人在目标端里加了一行空格子时，整表当一串比会对歪）。行列对不上再退回整表一串比。
-  const cloudGrid = tableGrid(cloudBody);
-  const localGrid = tableGrid(localBody);
-  const sameShape =
-    cloudGrid.length > 0 &&
-    cloudGrid.length === localGrid.length &&
-    cloudGrid.every((row, r) => row.length === localGrid[r].length);
-  const segments = sameShape
-    ? cloudGrid.flatMap((row, r) => row.map((cell, c) => [cell, localGrid[r][c]]))
-    : [[tableParagraphs(cloudBody), tableParagraphs(localBody)]];
+  // Align paragraphs within each existing table and cell. New optional component sections
+  // append as blocks, so an insertion can never end up in the feature-rule image column.
+  const cloudTables = tableGrids(cloudBody);
+  const localTables = tableGrids(localBody);
+  const cloudComponent = cloudTables.findIndex((grid) => grid[0]?.[0]?.some((node) => paraText(node) === "组件名称"));
+  const localComponent = localTables.findIndex((grid) => grid[0]?.[0]?.some((node) => paraText(node) === "组件名称"));
+  const appendComponents = localComponent >= 0 && cloudComponent < 0 &&
+    cloudTables.length === localTables.length - 1 && !published?.has("组件名称");
+  const pairedLocal = appendComponents ? localTables.filter((_, index) => index !== localComponent) : localTables;
+  const legacySingleTable = cloudTables.length === 1 && pairedLocal.length === 1 && (localComponent < 0 || appendComponents);
+  if (!legacySingleTable && (cloudTables.length !== pairedLocal.length || (cloudComponent !== localComponent && !appendComponents))) {
+    throw new Error("目标端和 FRS 的表格结构已分歧，请保留人工编辑并复核组件说明表，再继续增量发布");
+  }
+  const segments = cloudTables.flatMap((grid, index) => {
+    const other = pairedLocal[index];
+    const sameShape = grid.length === other.length && grid.every((row, r) => row.length === other[r].length);
+    if (sameShape) return grid.flatMap((row, r) => row.map((cell, c) => [cell, other[r][c]]));
+    if (legacySingleTable) return [[grid.flat(2), other.flat(2)]];
+    throw new Error("表格行列变化需复核，避免将规则写进错误的列");
+  });
 
   for (const [cloudParas, localParas] of segments) {
     const cloudText = cloudParas.map(paraText);
@@ -355,6 +364,15 @@ export function patchOps({ localBody, cloudBody, base = null, redline = false })
       summary.insert += 1;
       lines.push(`  + ${show(localText[step.j], 48)}`);
     }
+  }
+  if (appendComponents) {
+    const blocks = topBlocks(localBody);
+    const start = blocks.findIndex((block) => block[0] === "heading" && paraText(block) === "通用组件抽象说明");
+    const heading = start >= 0 ? start : blocks.findIndex((block) => paraText(block) === "通用组件抽象说明");
+    if (heading < 0) throw new Error("组件说明表缺少标题");
+    ops.push({ op: "insert", anchor: "@docEnd", position: "after", content: blocks.slice(heading) });
+    summary.insert += 1;
+    lines.push("  + 通用组件抽象说明");
   }
   const cloudCount = segments.reduce((n, [a]) => n + a.length, 0);
   const localCount = segments.reduce((n, [, b]) => n + b.length, 0);
@@ -581,14 +599,16 @@ export function chunk(list, size) {
 /** 补丁按批提交：相邻删除先合并，再按 OPS_PER_BATCH 切批 */
 export const batchOps = (ops) => chunk(mergeDeletes(ops), OPS_PER_BATCH);
 
-/** 功能点表按行、格取段落：[[格里的段落…]…]；没有表格时是空数组 */
-function tableGrid(body) {
-  const table = topBlocks(body).find((b) => b[0] === "table");
-  if (!table) return [];
-  return table
-    .slice(2)
-    .filter((tr) => Array.isArray(tr) && tr[0] === "tr")
-    .map((tr) => tr.slice(2).filter((tc) => Array.isArray(tc) && tc[0] === "tc").map((tc) => collectParagraphs(tc, [])));
+/** 每张表按行、格取段落：[[[格里的段落…]…]…]，一张表一项；没有表格时是空数组 */
+function tableGrids(body) {
+  return topBlocks(body)
+    .filter((b) => b[0] === "table")
+    .map((table) =>
+      table
+        .slice(2)
+        .filter((tr) => Array.isArray(tr) && tr[0] === "tr")
+        .map((tr) => tr.slice(2).filter((tc) => Array.isArray(tc) && tc[0] === "tc").map((tc) => collectParagraphs(tc, []))),
+    );
 }
 
 function parseArgs(argv) {

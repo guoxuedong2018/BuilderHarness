@@ -21,7 +21,7 @@ const CHROME_CANDIDATES = [
   "/usr/bin/chromium",
 ];
 
-async function findChrome() {
+export async function findChrome() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
   for (const candidate of CHROME_CANDIDATES) {
     if (await fs.access(candidate).then(() => true, () => false)) return candidate;
@@ -60,22 +60,24 @@ export async function launch({ headless = true, viewport, deviceScaleFactor } = 
   if (headless) args.unshift("--headless=new", "--hide-scrollbars");
 
   const child = spawn(binary, args, { stdio: ["ignore", "pipe", "pipe"] });
-  const endpoint = await readEndpoint(child);
-  const target = await firstPageTarget(endpoint);
-  const session = await connect(target.webSocketDebuggerUrl);
-
-  await session.send("Page.enable");
-  await session.send("Runtime.enable");
-  await setViewport(session, viewport);
-
-  return {
-    session,
-    async close() {
-      session.socket.close();
-      child.kill();
-      await fs.rm(profile, { recursive: true, force: true }).catch(() => {});
-    },
+  let session;
+  const close = async () => {
+    session?.socket.close();
+    child.kill();
+    await fs.rm(profile, { recursive: true, force: true }).catch(() => {});
   };
+  try {
+    const endpoint = await readEndpoint(child);
+    const target = await firstPageTarget(endpoint);
+    session = await connect(target.webSocketDebuggerUrl);
+    await session.send("Page.enable");
+    await session.send("Runtime.enable");
+    await setViewport(session, viewport);
+    return { session, close };
+  } catch (error) {
+    await close();
+    throw error;
+  }
 }
 
 /**
@@ -273,7 +275,8 @@ export async function setState(session, patch) {
 }
 
 export async function goto(session, url) {
-  await session.send("Page.navigate", { url });
+  const result = await session.send("Page.navigate", { url });
+  if (result.errorText) throw new Error(`Navigation failed: ${result.errorText}`);
   await waitForIdle(session);
 }
 

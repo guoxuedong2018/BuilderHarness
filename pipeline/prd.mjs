@@ -312,7 +312,8 @@ async function main() {
   async function finish(target, url, ids, sent = null) {
     step("回读核对");
     const outline = (await gateway.fetchOutline(target)).map((i) => i.text ?? "");
-    const lost = SECTIONS.filter((s) => !outline.some((t) => t.includes(s)));
+    const sections = [...SECTIONS, ...(frs.components?.items?.length ? ["通用组件抽象说明"] : [])];
+    const lost = sections.filter((s) => !outline.some((t) => t.includes(s)));
     const after = await gateway.fetchJsonml(target);
     const used = tableParagraphs(after.body).flatMap(imagesIn);
     const foreign = used.filter((id) => !id.endsWith(target));

@@ -6,6 +6,7 @@ import path from "node:path";
 const EXT = new Set([".js", ".mjs", ".cjs", ".css", ".html", ".json", ".map", ".txt", ".svg", ".xml", ".csv", ".md", ".webmanifest", ".yml", ".yaml"]);
 
 const RULES = [
+  { id: "dev-endpoint-decisions", re: /\/__decide\b/, why: "decision workbench endpoint" },
   { id: "dev-endpoint-review", re: /\/__proto_review\b/, why: "review middleware endpoint" },
   { id: "dev-endpoint-studio", re: /\/__builder_studio\b/, why: "content studio endpoint" },
   { id: "dev-endpoint-promo", re: /\/__promo\b/, why: "promo middleware endpoint" },
@@ -28,11 +29,27 @@ function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+export async function loadScanPolicy(file) {
+  if (!file) return null;
+  const contents = await readFile(file, "utf8");
+  let policy;
+  try { policy = JSON.parse(contents); } catch { throw new Error("Artifact policy is not valid JSON"); }
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) throw new Error("Artifact policy must be an object");
+  for (const field of ["denyPatterns", "denyValues", "allowValues"]) {
+    if (policy[field] != null && (!Array.isArray(policy[field]) ||
+        policy[field].some((value) => typeof value !== "string" || !value.trim()))) throw new Error(`Artifact policy ${field} must be a list of nonempty strings`);
+  }
+  return { ...policy, hash: createHash("sha256").update(contents).digest("hex") };
+}
+
 /** Scan and identify the exact artifact tree that a deployment will upload. */
-export async function inspectArtifact(dir, { denies = [] } = {}) {
-  const rules = [...RULES, ...denies.map((pattern, i) => ({
-    id: `deny-${i + 1}`, re: new RegExp(pattern), why: "host deny pattern",
-  }))];
+export async function inspectArtifact(dir, { denies = [], policy } = {}) {
+  const rules = [...RULES, ...[...denies, ...(policy?.denyPatterns ?? [])].map((pattern, i) => {
+    try { return { id: `deny-${i + 1}`, re: new RegExp(pattern), why: "host deny pattern" }; }
+    catch { throw new Error(`Invalid host deny pattern #${i + 1}`); }
+  })];
+  const allowedValues = new Set(policy?.allowValues ?? []);
+  const denyValues = (policy?.denyValues ?? []).filter((value) => !allowedValues.has(value));
   const findings = [];
   const manifest = [];
   const walk = async (folder) => {
@@ -54,7 +71,11 @@ export async function inspectArtifact(dir, { denies = [] } = {}) {
         findings.push({ rule: "private-file", reason: "environment file, key or source map", file: rel });
       }
       if (!EXT.has(path.extname(file).toLowerCase())) continue;
-      const lines = buf.toString("utf8").split("\n");
+      const body = buf.toString("utf8");
+      if (denyValues.some((value) => body.includes(value))) {
+        findings.push({ rule: "host-private-value", reason: "host private value", file: rel });
+      }
+      const lines = body.split("\n");
       for (const rule of rules) {
         const line = lines.findIndex((text) => rule.re.test(text));
         if (line >= 0) findings.push({ rule: rule.id, reason: rule.why, file: rel, line: line + 1 });

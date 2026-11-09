@@ -20,6 +20,8 @@
  */
 
 import { promises as fs } from "node:fs";
+import { prototypeUrl } from "./lib/prototype-url.mjs";
+import { PROJECT_CONFIG } from "./lib/paths.mjs";
 import path from "node:path";
 import { layoutSnapshot } from "./lib/layout-snapshot.mjs";
 import { KB_DIR, REPO_ROOT } from "./lib/paths.mjs";
@@ -50,7 +52,7 @@ import { recordMedia } from "./lib/media-ledger.mjs";
 const CONFIG_FILE = path.join(KB_DIR, "shots.config.mjs");
 const OUT_DIR = path.join(KB_DIR, "images");
 
-const DEFAULT_BASE_URL = "http://localhost:5273";
+const DEFAULT_BASE_URL = process.env.BUILDERHARNESS_BASE_URL || PROJECT_CONFIG.baseUrl || "http://localhost:5273";
 /** 比 PRD 截图高一截：手册要整块入镜，页面自身的滚动区不能把内容切掉 */
 const VIEWPORT = { width: 1680, height: 1400, scale: 2 };
 const SETTLE_MS = 450;
@@ -224,7 +226,7 @@ async function freezeMotion(session) {
 
 async function capture(session, key, def, { baseUrl, nonce }) {
   await setViewport(session, { ...VIEWPORT, ...def.viewport });
-  await goto(session, `${baseUrl.replace(/\/$/, "")}/?shot=${nonce}#${def.route}`);
+  await goto(session, prototypeUrl(baseUrl, def.route, { shot: nonce }));
   await installHelpers(session);
   await freezeMotion(session);
   await sleep(SETTLE_MS);

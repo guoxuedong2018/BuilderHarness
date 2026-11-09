@@ -111,7 +111,7 @@ async function main() {
       for (const { key, items } of await listDecisions()) {
         for (const row of items.filter((item) => item.submission && !item.submission.closedAt)) {
           const item = row.submission;
-          console.log(`  ${key}/${row.id} [${row.status}] ${item.id} ${item.action} — ${item.author}: ${flat(item.body)}${item.source ? " · " + flat(item.source) : ""}`);
+          console.log(`  ${key}/${row.id} [${row.status}] ${item.id} ${item.action} — ${item.author}: ${flat(item.body)}${item.note ? " · " + flat(item.note) : ""}${item.source ? " · " + flat(item.source) : ""}`);
         }
       }
     }

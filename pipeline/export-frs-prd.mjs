@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * FRS 件套 → PRD 内容
+ * FRS 件套 → 云文档 PRD
  * ------------------------------------------------------------------
  * 把 docs/features/<KEY>/ 的 FRS.json 与 FLOW.md 渲染成一篇 PRD：
  *
@@ -9,15 +9,16 @@
  *   └─ 需求描述
  *      ├─ 原型地址     ← .static-site-deploy.json 的域名 + prototype.entryRoute
  *      ├─ 方案设计     ← FLOW.md（Mermaid 原样带过去）
- *      └─ 功能点规则描述 ← FRS.spec，三列表格「功能点 | 参考图 | 规则描述」
+ *      ├─ 功能点规则描述 ← FRS.spec，三列表格「功能点 | 参考图 | 规则描述」
+ *      └─ 通用组件抽象说明 ← FRS.components（可选），三列表格「组件名称 | 截图示例 | 说明」
  *
  * 产物走 JsonML 而不是 Markdown：功能点表格的单元格里有嵌套有序列表、黄底权限规则
  * 和多张配图，Markdown 表格全部表达不了；在线文档也不渲染 Markdown 里的 Mermaid 源码。
  *
  * 用法：
- *   npx builderharness export-frs-prd <KEY>
- *   npx builderharness export-frs-prd <KEY> --images docs/prd/<KEY>/images.json
- *   npx builderharness export-frs-prd <KEY> --scope delta
+ *   builderharness export-frs-prd <KEY>
+ *   builderharness export-frs-prd <KEY> --images docs/prd/<KEY>/images.json
+ *   builderharness export-frs-prd <KEY> --scope delta
  *
  * `--scope delta` 只出需要研发迭代的功能点（`origin` 为 new / online-page-new / online-hardened），
  * 线上已有且本期不改的字段整条不渲染。这是「精简 PRD」的唯一正当做法——收窄的是
@@ -34,6 +35,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { FEATURES_DIR, PRD_DIR, REPO_ROOT, WEB_DIR } from "./lib/paths.mjs";
+import { PROJECT_CONFIG } from "./lib/paths.mjs";
 
 import {
   HEADER_FILL,
@@ -70,7 +72,7 @@ const RULE_SECTIONS = [
 /** 研发迭代范围：本期新增（新页面 / 已有页面上）+ 线上已有但本期改过的。`online` 是照搬现状，不进 delta。 */
 const DELTA_ORIGINS = new Set(["new", "online-page-new", "online-hardened"]);
 
-/** 图例一个标签一条：长句挤在一段里不好扫，读者在已发布文档里会自己拆成列表 */
+/** 图例一个标签一条（用户 2026-10-29 在云文档里拆成了列表） */
 const FULL_LEGEND = [
   "功能点标题后的标签含义：",
   "**线上已有**＝线上已有、本期按现状落地；",
@@ -108,7 +110,7 @@ function backgroundItems(lines, listId) {
 /**
  * @param {object} frs
  * @param {string} flowMarkdown
- * @param {{ prototypeUrl: string | null, images: Record<string, object>, warnings?: string[] }} context
+ * @param {{ prototypeUrl: string | null, prototypeOrigin?: string | null, images: Record<string, object>, warnings?: string[] }} context
  *   warnings 由调用方传入收集，目前只记「参考图会渲染成点不开的纸片」。
  * @returns {Array} 块节点数组，直接作为 setBodyChildren 的 content
  */
@@ -118,7 +120,7 @@ function backgroundItems(lines, listId) {
  * 用在「一篇已评审的文档里再加一个需求」的场景：这时不能用 `setBodyChildren`，
  * 那会连别人评审过的正文一起覆盖掉。片段由调用方以 `insert` 挂到文末。
  */
-export function buildFragment(frs, flowMarkdown, { prototypeUrl, images, warnings = [], scope = "all" }) {
+export function buildFragment(frs, flowMarkdown, { prototypeUrl, prototypeOrigin = null, images, warnings = [], scope = "all" }) {
   const blocks = [heading(2, frs.title)];
 
   const bgList = newListId();
@@ -136,11 +138,12 @@ export function buildFragment(frs, flowMarkdown, { prototypeUrl, images, warning
   blocks.push(heading(3, "功能点规则描述"));
   blocks.push(...legendBlocks(scope));
   blocks.push(buildSpecTable(frs.spec ?? [], frs.shots ?? {}, images, warnings));
+  blocks.push(...componentBlocks(frs.components, { prototypeOrigin, shotDefs: frs.shots ?? {}, images, warnings }));
 
   return blocks;
 }
 
-export function buildBody(frs, flowMarkdown, { prototypeUrl, images, warnings = [], scope = "all" }) {
+export function buildBody(frs, flowMarkdown, { prototypeUrl, prototypeOrigin = null, images, warnings = [], scope = "all" }) {
   const blocks = [heading(0, `【PRD】${frs.title}`)];
 
   blocks.push(heading(2, "需求背景"));
@@ -162,6 +165,7 @@ export function buildBody(frs, flowMarkdown, { prototypeUrl, images, warnings = 
   // 研发读 PRD 时要先分清「照搬线上」和「本期改了什么」，否则会把加固当成全新字段重做。
   blocks.push(...legendBlocks(scope));
   blocks.push(buildSpecTable(frs.spec ?? [], frs.shots ?? {}, images, warnings));
+  blocks.push(...componentBlocks(frs.components, { prototypeOrigin, shotDefs: frs.shots ?? {}, images, warnings }));
 
   return blocks;
 }
@@ -178,16 +182,67 @@ function buildSpecTable(spec, shotDefs, images, warnings) {
   for (const group of spec) {
     rows.push(
       tr([
-        // 分组名用五级标题：长文档靠目录跳到某一页
+        // 分组名用五级标题：长文档靠目录跳到某一页（用户 2026-10-29 在云文档里把分组名都改成了标题）
         tc([heading(5, group.group)]),
-        // 参考图是截图配方的 key；人在已发布文档参考图格里插的图同步回来写 { image, width, height }，原样放回
-        tc((group.shots ?? []).map((key) => (key?.image ? image({ imageId: key.image, width: key.width, height: key.height }) : shotNode(key, shotDefs, images, SHOT_WIDTH_PT, null, warnings)))),
+        // 参考图是截图配方的 key；人在云文档参考图格里插的图同步回来写 { image, width, height }，原样放回
+        tc(shotBlocks(group.shots, SHOT_WIDTH_PT, shotDefs, images, warnings)),
         tc(ruleCell(group.points ?? [], shotDefs, images, warnings)),
       ]),
     );
   }
 
   return table(rows, TABLE_COL_WIDTHS);
+}
+
+/** 参考图格：字符串是截图配方的 key；对象是人在云文档里插的图，同步回来写 { image, width, height, caption? }，原样放回 */
+function shotBlocks(shots, widthPt, shotDefs, images, warnings) {
+  return (shots ?? []).map((key) =>
+    key?.image
+      ? image({ imageId: key.image, width: key.width, height: key.height, description: key.caption })
+      : shotNode(key, shotDefs, images, widthPt, null, warnings),
+  );
+}
+
+/** 组件说明表三列宽（pt），合计与功能点表一样宽 */
+const COMPONENT_COL_WIDTHS = [150, 155, 424];
+const COMPONENT_SHOT_WIDTH_PT = 143;
+
+/**
+ * 通用组件抽象说明：功能点表之后另起一节，列出要抽成跨页面复用组件的交互。
+ * 说明格先给原型里这个组件的地址，再列要点。FRS 里只记路由，渲染时拼上部署域名，内网地址不进仓库。
+ */
+function componentBlocks(components, { prototypeOrigin, shotDefs, images, warnings }) {
+  const items = components?.items ?? [];
+  if (items.length === 0) return [];
+  if (!prototypeOrigin) warnings.push("未配置原型发布地址，组件说明显示相对路由");
+  const link = (route) => {
+    if (!route) return null;
+    if (!prototypeOrigin) return route;
+    const url = routeUrl(prototypeOrigin, route);
+    return `[${url}](${url})`;
+  };
+
+  const blocks = [heading(4, "通用组件抽象说明")];
+  const intro = link(components.route);
+  if (intro) blocks.push(p(`所有UI交互规范，可参考：${intro}`));
+
+  const rows = [tr(["组件名称", "截图示例", "说明"].map((label) => tc([p(`**${label}**`)], { fill: HEADER_FILL })))];
+  for (const item of items) {
+    const notes = [];
+    const at = link(item.route);
+    if (at) notes.push(p(`查看交互：${at}`));
+    const listId = newListId();
+    for (const note of item.notes ?? []) notes.push(...ruleNodes(note, { listId, level: 0 }, shotDefs, images, warnings));
+    rows.push(
+      tr([
+        tc([p(`**${item.name}**`)]),
+        tc(shotBlocks(item.shots, COMPONENT_SHOT_WIDTH_PT, shotDefs, images, warnings)),
+        tc(notes),
+      ]),
+    );
+  }
+  blocks.push(table(rows, COMPONENT_COL_WIDTHS));
+  return blocks;
 }
 
 /**
@@ -235,8 +290,8 @@ export function filterSpecByScope(spec, scope) {
     .filter((group) => group.points.length > 0);
 }
 
-/** 收窄后仍被引用的截图 key，用来剔掉「只服务于被过滤掉的功能点」的那几张图。 */
-function referencedShots(spec) {
+/** 收窄后仍被引用的截图 key，用来剔掉「只服务于被过滤掉的功能点」的那几张图。组件说明不随 scope 收窄，它引用的图都留着 */
+function referencedShots(spec, components) {
   const keys = new Set();
   const walk = (rule) => {
     if (typeof rule === "string") return;
@@ -253,6 +308,10 @@ function referencedShots(spec) {
         for (const rule of point[section.field] ?? []) walk(rule);
       }
     }
+  }
+  for (const item of components?.items ?? []) {
+    for (const key of item.shots ?? []) if (typeof key === "string") keys.add(key);
+    for (const note of item.notes ?? []) walk(note);
   }
   return keys;
 }
@@ -300,7 +359,7 @@ function ruleNodes(rule, opts, shotDefs, images, warnings) {
   }
   // 结构化的示例（请求体、证据格式）用代码块，比在一句话里列字段好读；不编号，跟在它说明的那条下面
   if (rule.code) return [codeParagraph(rule.code, rule.lang)];
-  // 人在已发布文档里插的图：同步回 FRS 时记它的 imageId 与尺寸，照原样放回，不换成截图
+  // 人在云文档里插的图：同步回 FRS 时记它的 imageId 与尺寸，照原样放回，不换成截图
   if (rule.image) return [image({ imageId: rule.image, width: rule.width, height: rule.height })];
 
   const nodes = [listItem(rule.text ?? "", opts)];
@@ -368,7 +427,7 @@ export function validateBody(blocks) {
 // ---------------------------------------------------------------- 降级预览
 
 /** 本地评审用。刻意保持朴素：它只用来 diff 和通读，不参与发布。 */
-function buildPreview(frs, flowMarkdown, { prototypeUrl, scope = "all" }) {
+function buildPreview(frs, flowMarkdown, { prototypeUrl, prototypeOrigin = null, scope = "all" }) {
   const out = [`# 【PRD】${frs.title}`, "", "## 需求背景", ""];
 
   out.push("1. **解决什么问题：**");
@@ -403,13 +462,28 @@ function buildPreview(frs, flowMarkdown, { prototypeUrl, scope = "all" }) {
     }
   }
 
+  const items = frs.components?.items ?? [];
+  if (items.length) {
+    const at = (route) => (prototypeOrigin ? routeUrl(prototypeOrigin, route) : route);
+    out.push("### 通用组件抽象说明", "");
+    if (frs.components.route) out.push(`所有UI交互规范，可参考：${at(frs.components.route)}`, "");
+    for (const item of items) {
+      out.push(`#### ${item.name}`, "");
+      const shots = (item.shots ?? []).map((key) => (typeof key === "string" ? key : key.caption ?? "[图]")).join("、");
+      if (shots) out.push(`> 截图示例：${shots}`, "");
+      if (item.route) out.push(`查看交互：${at(item.route)}`, "");
+      (item.notes ?? []).forEach((note, i) => out.push(...previewRule(note, i + 1, "")));
+      out.push("");
+    }
+  }
+
   return out.join("\n");
 }
 
 function previewRule(rule, index, indent) {
   if (typeof rule === "string") return [`${indent}${index}. ${rule}`];
   if (rule.shot) return [`${indent}${index}. （参考图：${rule.shot}）`];
-  if (rule.image) return [`${indent}（已发布文档里插的图）`];
+  if (rule.image) return [`${indent}（云文档里插的图）`];
   if (rule.code) return [`${indent}\`\`\`${rule.lang ?? ""}`, ...rule.code.split("\n").map((l) => `${indent}${l}`), `${indent}\`\`\``];
   const lines = [`${indent}${index}. ${rule.text ?? ""}`];
   (rule.children ?? []).forEach((child, i) =>
@@ -424,18 +498,23 @@ async function readJson(file) {
   return JSON.parse(await fs.readFile(file, "utf8"));
 }
 
-async function readPrototypeUrl(frs) {
-  const route = frs.prototype?.entryRoute;
-  if (!route) return null;
+/** 部署出去的原型域名（web/.static-site-deploy.json，已 gitignore）；没部署过时为 null */
+async function readPrototypeOrigin() {
   try {
-    const { domain } = await readJson(DEPLOY_BINDING);
+    const explicit = process.env.BUILDERHARNESS_PROTOTYPE_URL || PROJECT_CONFIG.prototypeUrl;
+    const domain = explicit || (await readJson(DEPLOY_BINDING)).domain;
     if (!domain) return null;
     const origin = domain.startsWith("http") ? domain : `https://${domain}`;
-    // 路由是 hash 模式，链接必须带 #，否则深层链接在静态托管上 404
-    return `${origin.replace(/\/$/, "")}/#${route}`;
+    const url = new URL(origin);
+    return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password ? origin.replace(/\/$/, "") : null;
   } catch {
     return null;
   }
+}
+
+/** 原型里某个路由的完整地址。路由是 hash 模式，链接必须带 #，否则深层链接在 frontend-cloud 上 404 */
+function routeUrl(origin, route) {
+  return PROJECT_CONFIG.routeMode === "history" ? `${origin}${route}` : `${origin}/#${route}`;
 }
 
 /**
@@ -480,7 +559,7 @@ async function main() {
   if (args.help || !args.key) {
     console.log(
       [
-        "用法: npx builderharness export-frs-prd <FEATURE_KEY> [选项]",
+        "用法: builderharness export-frs-prd <FEATURE_KEY> [选项]",
         "",
         "  --images <路径>   截图上传结果 {shotKey: imageId}，缺省则参考图列留占位",
         "  --out-dir <路径>  产物目录，默认 docs/prd/<FEATURE_KEY>/",
@@ -520,14 +599,15 @@ async function main() {
   const frs = { ...source, spec };
 
   const flowMarkdown = await fs.readFile(path.join(featureDir, "FLOW.md"), "utf8").catch(() => "");
-  const prototypeUrl = await readPrototypeUrl(frs);
+  const prototypeOrigin = await readPrototypeOrigin();
+  const prototypeUrl = prototypeOrigin && frs.prototype?.entryRoute ? routeUrl(prototypeOrigin, frs.prototype.entryRoute) : null;
   const images = await readImages(args.images, path.join(featureDir, "shots"));
 
   const warnings = [];
   // `--append-after` 走片段模式：往一篇**已有正文**的文末追加，别人评审过的内容不动
   const appending = Boolean(args.appendAfter);
   const build = appending ? buildFragment : buildBody;
-  const body = build(frs, flowMarkdown, { prototypeUrl, images, warnings, scope: args.scope });
+  const body = build(frs, flowMarkdown, { prototypeUrl, prototypeOrigin, images, warnings, scope: args.scope });
 
   const problems = validateBody(body);
   if (problems.length > 0) {
@@ -546,13 +626,13 @@ async function main() {
   await fs.writeFile(path.join(outDir, "ops.json"), `${JSON.stringify([op], null, 2)}\n`, "utf8");
   await fs.writeFile(
     path.join(outDir, "preview.md"),
-    `${buildPreview(frs, flowMarkdown, { prototypeUrl, scope: args.scope })}\n`,
+    `${buildPreview(frs, flowMarkdown, { prototypeUrl, prototypeOrigin, scope: args.scope })}\n`,
     "utf8",
   );
   // order 固定截图顺序：`word +append-image` 按 --image 出现顺序回 imageId，
   // 两边必须用同一个序列对齐，否则图会错位到别的功能点上。
   // delta 下只留仍被引用的图，否则会去抓一批正文里根本不出现的截图。
-  const kept = args.scope === "delta" ? referencedShots(spec) : null;
+  const kept = args.scope === "delta" ? referencedShots(spec, frs.components) : null;
   const order = Object.keys(frs.shots ?? {}).filter((key) => !kept || kept.has(key));
   await fs.writeFile(
     path.join(outDir, "shots.json"),
@@ -578,11 +658,11 @@ async function main() {
     `已生成 ${rel}/：${spec.length} 个分组、${points} 个功能点` +
       (args.scope === "delta" ? `（--scope delta，全量 ${allPoints} 个里的研发迭代范围）` : ""),
   );
-  if (!prototypeUrl) console.log("原型地址为空：FRS.prototype.entryRoute 或 原型工程的 .static-site-deploy.json 缺失");
+  if (!prototypeUrl) console.log("原型地址为空：FRS.prototype.entryRoute 或 web/.static-site-deploy.json 缺失");
   if (missing.length > 0) console.log(`参考图待补 ${missing.length} 张：${missing.join("、")}`);
   for (const line of warnings) console.log(`  提醒 ${line}`);
   console.log("");
-  console.log("下一步走 builderharness prd：截图 → 建文档 → 追图拿 imageId → 重新导出 → setBodyChildren → 回读校验");
+  console.log("下一步走 /prd-publish：截图 → 建文档 → 追图拿 imageId → 重新导出 → setBodyChildren → 回读校验");
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

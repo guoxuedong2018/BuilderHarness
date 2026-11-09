@@ -24,3 +24,9 @@ For a feature, keep confirmed decisions in its README, rules and AC IDs in FRS, 
 `builderharness verify <KEY>` before resolving related feedback. Use `--status` to inspect evidence
 without rerunning. Only explicitly blocking questions and scenarios block feature-linked deployments.
 The source repository includes a runnable React + Vite demo and a declarative scene recipe.
+
+Cursor can use `builderharness init --prototype --agent cursor`. Use the installed
+product design review skill to recover requirements, model the domain and test counterexamples.
+For demos and launch clips, the feature-promo skill includes visual review, templates,
+texture capture and sound design. For project-specific data behavior, use local
+`simulate` scenarios and synthetic `fixtures`.

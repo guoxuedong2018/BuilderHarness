@@ -42,6 +42,7 @@
       "clip": "CSS 选择器，截这一块；省略则截整个视口"
     }
   },
+  "components": { "route": "/ui-spec", "items": [] },
   "acceptance": [
     "AC1: "
   ],

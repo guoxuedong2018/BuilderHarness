@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { anchorLoc as anchorLocPlugin } from "./build/anchor-loc.js";
 import { anchorLocReact } from "./build/anchor-loc-react.js";
 import { reviewServer } from "./server/review-server.js";
+import { decideServer } from "./server/decide-server.js";
 import { promoServer } from "./server/promo-server.js";
 import { studioServer } from "./server/studio-server.js";
 
@@ -59,21 +60,26 @@ const KIT_PREBUNDLE = ["react", "react/jsx-runtime", "react/jsx-dev-runtime", "r
  */
 const HOST_ID = "virtual:builderharness/host";
 const HOST_RESOLVED = `\0${HOST_ID}`;
+const PAGE_LOOK_ID = "virtual:builderharness/page-look";
 
 /** Absolute paths outside Vite's root must go through /@fs/ in dev. */
 function fsSpec(abs) {
   return `/@fs/${abs.split(path.sep).join("/").replace(/^\//, "")}`;
 }
 
-function hostBridge({ root, frsRegistry, barExtras, barLinks, agentPrompt }) {
+function hostBridge({ root, frsRegistry, barExtras, barLinks, agentPrompt, pageLook }) {
   return {
     name: "builderharness:host-bridge",
     apply: "serve",
     resolveId(id) {
       if (id === HOST_ID) return HOST_RESOLVED;
+      if (id === PAGE_LOOK_ID) return "\0" + PAGE_LOOK_ID;
       return null;
     },
     load(id) {
+      if (id === "\0" + PAGE_LOOK_ID) {
+        return pageLook ? `import ${JSON.stringify(fsSpec(path.resolve(root, pageLook)))};` : "export {}";
+      }
       if (id !== HOST_RESOLVED) return null;
       const lines = [];
 
@@ -141,6 +147,7 @@ export function builderHarness({
   anchorLoc = "auto",
   agentPrompt = "",
   promo = false,
+  pageLook,
 } = {}) {
   return [
     {
@@ -190,8 +197,9 @@ export function builderHarness({
         : anchorLoc === "vue"
           ? [anchorLocPlugin({ root })]
           : [anchorLocPlugin({ root }), anchorLocReact({ root })]),
-    hostBridge({ root, frsRegistry, barExtras, barLinks, agentPrompt }),
+    hostBridge({ root, frsRegistry, barExtras, barLinks, agentPrompt, pageLook }),
     reviewServer({ reviewsDir }),
+    decideServer(),
     studioServer(),
     ...(promo ? [promoServer()] : []),
   ];

@@ -23,6 +23,8 @@ const COMMANDS = {
   context: "context.mjs",
   eval: "eval.mjs",
   promo: "promo.mjs",
+  fixtures: "fixtures.mjs",
+  simulate: "simulate.mjs",
   preflight: "preflight.mjs",
   deploy: "deploy.mjs",
   verify: "verify.mjs",
@@ -57,6 +59,8 @@ Usage:
 Commands:
   init                     Connect the existing agent (--prototype for native workflow skills, --scaffold for templates)
   context                  Read bounded task evidence, decisions and verification entries
+  fixtures                 Build synthetic or local browser-ready media fixtures
+  simulate                 Run local HTTP scenario matrices with fault injection
   promo                    Render reproducible prototype scenes to MP4 and GIF
   preflight                Scan a built prototype before sharing it
   deploy                   Plan or apply an approved prototype deployment

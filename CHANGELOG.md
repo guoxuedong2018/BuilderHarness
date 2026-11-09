@@ -2,6 +2,11 @@
 
 ## 0.9.0 — source changes, not published
 
+- Full feature-promo playbook with product-film templates, sound synthesis, texture capture and FFmpeg GIF fallback.
+- Grouped decisions with source previews, option selection and withdrawal. Cursor installs native rules and product-design review references.
+- Component-level PRD sections, shared capture routing, opt-in local service startup, synthetic media and HTTP fault simulation.
+- Host artifact policy, framework-neutral table/editor helpers and read-only decision and verification MCP tools.
+
 - `init --prototype` registers native feature workflow skills with references. The review toolbar collects decisions and checks README/FRS writeback before closure.
 - `verify <KEY>` runs and records AC-linked scenarios. `preflight` ships in the CLI, prototype deployment binds a plan to an artifact and target, and PRD plans can bind approval to the current content and revision.
 - `promo` renders the live prototype from scene timelines into MP4, GIF, poster and contact sheets, with per-scene input tracking. The React demo includes a runnable draft-creation workflow.

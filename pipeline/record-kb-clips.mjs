@@ -17,6 +17,8 @@
  */
 
 import { promises as fs } from "node:fs";
+import { prototypeUrl } from "./lib/prototype-url.mjs";
+import { PROJECT_CONFIG } from "./lib/paths.mjs";
 import path from "node:path";
 import { KB_DIR, REPO_ROOT } from "./lib/paths.mjs";
 
@@ -38,7 +40,7 @@ import { recordMedia } from "./lib/media-ledger.mjs";
 const CONFIG_FILE = path.join(KB_DIR, "clips.config.mjs");
 const OUT_DIR = path.join(KB_DIR, "media");
 
-const DEFAULT_BASE_URL = "http://localhost:5273";
+const DEFAULT_BASE_URL = process.env.BUILDERHARNESS_BASE_URL || PROJECT_CONFIG.baseUrl || "http://localhost:5273";
 /**
  * 录屏视口：1280×720 布局 × 1.5 倍采样 = 正好 1920×1080 输出。
  *
@@ -122,7 +124,7 @@ async function runBeat(session, state, beat) {
 
 async function record(session, key, def, { baseUrl, nonce }) {
   await setViewport(session, { ...VIEWPORT, ...def.viewport, scale: 1 });
-  await goto(session, `${baseUrl.replace(/\/$/, "")}/?clip=${nonce}#${def.route}`);
+  await goto(session, prototypeUrl(baseUrl, def.route, { clip: nonce }));
   await installHelpers(session);
   await sleep(500);
 

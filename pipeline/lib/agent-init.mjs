@@ -16,7 +16,7 @@ async function skillFiles(root, rel = "") {
   for (const entry of await fs.readdir(path.join(root, rel), { withFileTypes: true })) {
     const file = path.posix.join(rel, entry.name);
     if (entry.isDirectory()) files.push(...await skillFiles(root, file));
-    else if (entry.isFile() && entry.name.endsWith(".md")) files.push(file);
+    else if (entry.isFile() && /\.(?:md|json)$/.test(entry.name)) files.push(file);
   }
   return files.sort();
 }
@@ -68,24 +68,34 @@ function owned(text) {
 
 /** Add/remove only verifiably owned material. No model, subprocess or application changes. */
 export async function initializeAgent({ root, kitRoot, agent, prototype = false, remove = false, dryRun = false }) {
-  if (agent && !["codex", "claude", "both"].includes(agent)) throw new Error("--agent must be codex, claude or both");
+  if (agent && !["codex", "claude", "cursor", "both", "all"].includes(agent)) throw new Error("--agent must be codex, claude, cursor, both or all");
   if (!dryRun) await fs.mkdir(root, { recursive: true });
   root = path.resolve(root);
   if (await exists(root)) root = await fs.realpath(root);
   const hasCodex = await exists(path.join(root, "AGENTS.md")) || (remove && await exists(path.join(root, ".agents/skills/builderharness-review/SKILL.md")));
   const hasClaude = await exists(path.join(root, "CLAUDE.md")) || (remove && await exists(path.join(root, ".claude/skills/builderharness-review/SKILL.md")));
-  const hosts = agent === "both" ? ["codex", "claude"] : agent ? [agent]
-    : hasCodex || hasClaude ? [...(hasCodex ? ["codex"] : []), ...(hasClaude ? ["claude"] : [])] : ["codex", "claude"];
+  const cursorRule = ".cursor/rules/builderharness.mdc";
+  const hasCursor = await exists(path.join(root, cursorRule)) || (!remove && await exists(path.join(root, ".cursor")));
+  const available = { codex: hasCodex, claude: hasClaude, cursor: hasCursor };
+  const detected = Object.keys(available).filter((host) => available[host]);
+  const hosts = agent === "all" ? Object.keys(available) : agent === "both" ? ["codex", "claude"]
+    : agent ? [agent] : detected.length ? detected : ["codex", "claude"];
   const skillRoot = path.join(kitRoot, "scaffold", ".agent", "skills");
   const workflow = await fs.readFile(path.join(kitRoot, "scaffold", "agent-workflow.md"), "utf8");
-  const otherHostRemains = remove && ["codex", "claude"].some((host) => !hosts.includes(host) && (host === "codex" ? hasCodex : hasClaude));
+  const otherHostRemains = remove && detected.some((host) => !hosts.includes(host));
   const plans = [];
   for (const host of hosts) {
-    plans.push({ file: host === "codex" ? "AGENTS.md" : "CLAUDE.md", instruction: true });
-    const dir = `${host === "codex" ? ".agents" : ".claude"}/skills`;
+    if (host === "cursor") {
+      plans.push({ file: cursorRule, body: [
+        "---", "description: BuilderHarness product and prototype workflow", "alwaysApply: true", "---", "",
+        "Read docs/builderharness/WORKFLOW.md. Use the builderharness-review skill when judging product changes.",
+        "Use builderharness-product-design-review when installed for M/L design review. Preserve host rules and permissions.", "",
+      ].join("\n") });
+    } else plans.push({ file: host === "codex" ? "AGENTS.md" : "CLAUDE.md", instruction: true });
+    const dir = `${{ codex: ".agents", claude: ".claude", cursor: ".cursor" }[host]}/skills`;
     const withPrototype = prototype || remove || await exists(path.join(root, dir, "builderharness-ui-prototype/SKILL.md"));
     const names = withPrototype
-      ? ["requirement-review", "prd-author", "ui-prototype", "frontend-quality", "review-local", "prd-publish", "deploy-prototype", "content-draft", "feature-promo"]
+      ? ["requirement-review", "product-design-review", "prd-author", "ui-prototype", "frontend-quality", "review-local", "prd-publish", "deploy-prototype", "content-draft", "feature-promo"]
       : ["requirement-review"];
     for (const name of names) {
       const installed = name === "requirement-review" ? "builderharness-review" : `builderharness-${name}`;

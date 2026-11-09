@@ -1,0 +1,778 @@
+// 决策页。套件样式不 scoped：类名一律 dc- 前缀，靠前缀与宿主隔开
+@import "../core/kit.less";
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+#bk-decide {
+  height: 100%;
+}
+
+.dc-page {
+  container: decisions / inline-size;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-size: @bk-fs-sm;
+  color: @color-text;
+  background: @color-page-bg;
+}
+
+.dc-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.dc-muted {
+  font-size: @bk-fs-xs;
+  color: @color-text-secondary;
+}
+
+.dc-input {
+  .bk-input();
+}
+
+textarea.dc-input {
+  line-height: 1.6;
+  resize: vertical;
+}
+
+// ── 顶栏 ─────────────────────────────────────────────
+.dc-bar {
+  display: flex;
+  flex: 0 0 auto;
+  gap: @space-12;
+  align-items: center;
+  height: 44px;
+  padding: 0 @space-16;
+  background: @color-white;
+  border-bottom: 1px solid @color-border;
+}
+
+.dc-back {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  align-items: center;
+  padding-right: @space-12;
+  font-size: @bk-fs-sm;
+  color: @color-text-secondary;
+  text-decoration: none;
+  border-right: 1px solid @color-border;
+
+  &:hover { color: @color-primary; }
+}
+
+.dc-brand {
+  flex: 0 0 auto;
+  font-size: @bk-fs-md;
+  font-weight: 600;
+  color: @color-heading;
+}
+
+.dc-feat select {
+  width: auto;
+  max-width: ~"min(520px, 45vw)";
+  height: 28px;
+  padding: 0 @space-8;
+  font-size: @bk-fs-md;
+}
+
+.dc-path {
+  min-width: 0;
+  overflow: hidden;
+  font-family: @font-family-code;
+  font-size: @bk-fs-xs;
+  color: @color-text-weak;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dc-bar-right {
+  display: flex;
+  flex: 0 0 auto;
+  gap: @space-8;
+  align-items: center;
+  margin-left: auto;
+}
+
+.dc-tally {
+  font-size: @bk-fs-xs;
+  color: @color-text-secondary;
+}
+
+.dc-blank {
+  padding: @space-48 @space-24;
+  font-size: @bk-fs-md;
+  color: @color-text-secondary;
+  text-align: center;
+
+  p { margin: 0 0 @space-8; }
+}
+
+// ── 三栏：清单 / 卡片 / 原文 ─────────────────────────
+.dc-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.dc-list {
+  flex: 0 0 300px;
+  overflow-y: auto;
+  background: @color-white;
+  border-right: 1px solid @color-border;
+
+  ul {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+}
+
+.dc-group + .dc-group {
+  border-top: 1px solid @color-divider;
+}
+
+.dc-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: @space-8;
+  align-items: center;
+  padding: @space-12 @space-12 @space-4;
+  background: @color-white;
+
+  h2 {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: @bk-fs-sm;
+    font-weight: 600;
+    color: @color-heading;
+  }
+}
+
+// 「全部件套」：左栏最上面的入口，和下面的条目分开
+.dc-all {
+  display: flex;
+  gap: @space-8;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: @space-12;
+  font: inherit;
+  font-size: @bk-fs-md;
+  font-weight: 600;
+  color: @color-heading;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid @color-divider;
+  border-left: 2px solid transparent;
+
+  &:hover { background: @color-hover-bg; }
+  &.is-active { background: @color-bg-subtle; border-left-color: @color-primary; }
+}
+
+.dc-group-counts {
+  display: inline-flex;
+  gap: @space-8;
+  font-size: @bk-fs-xs;
+  font-weight: 400;
+  color: @color-text-secondary;
+
+  em {
+    font-style: normal;
+    color: @color-status-failed;
+  }
+}
+
+.dc-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 6px @space-12;
+  font: inherit;
+  font-size: @bk-fs-sm;
+  color: @color-text;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-left: 2px solid transparent;
+
+  &:hover { background: @color-hover-bg; }
+  &.is-active {
+    background: @color-bg-subtle;
+    border-left-color: @color-primary;
+
+    .dc-row-q { color: @color-heading; }
+  }
+}
+
+// 全部件套里的一条：上面一行是哪份需求、编号、状态，下面是问题
+.dc-row.is-two {
+  flex-direction: column;
+  gap: 2px;
+  align-items: stretch;
+}
+
+.dc-row-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+
+  .dc-row-status { margin-left: auto; }
+}
+
+.dc-row-feat {
+  min-width: 0;
+  max-width: 160px;
+  overflow: hidden;
+  font-size: @bk-fs-xs;
+  color: @color-text-secondary;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dc-row-id {
+  flex: 0 0 auto;
+  min-width: 28px;
+  font-family: @font-family-code;
+  font-size: @bk-fs-xs;
+  color: @color-text-secondary;
+}
+
+.dc-row-block {
+  flex: 0 0 auto;
+  font-size: @bk-fs-xs;
+}
+
+.dc-row-q {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 状态：待定是空心的，要你动手；已提交是主色；已定是绿；暂留是橙
+.dc-row-status,
+.dc-status {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  font-size: @bk-fs-xs;
+  line-height: 18px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  border-radius: @radius-tag;
+
+  &.is-pending { color: @color-text-secondary; border-color: @color-border; }
+  &.is-submitted { color: @color-status-info; background: @color-status-info-bg; }
+  &.is-decided { color: @color-status-success; background: @color-status-success-bg; }
+  &.is-provisional { color: @color-status-warning; background: @color-status-warning-bg; }
+}
+
+.dc-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+// 全部件套里打开的卡：上面一行写它属于哪份需求
+.dc-from {
+  display: flex;
+  gap: @space-8;
+  align-items: center;
+  max-width: 820px;
+  margin: @space-16 auto calc(-1 * @space-8);
+  font-size: @bk-fs-xs;
+  color: @color-text-secondary;
+}
+
+// ── 卡片 ─────────────────────────────────────────────
+.dc-card {
+  max-width: 820px;
+  padding: @space-20 @space-24 @space-32;
+  margin: @space-16 auto @space-24;
+  line-height: 1.7;
+  background: @color-white;
+  border: 1px solid @color-border;
+  border-radius: @radius-overlay;
+
+  h3 {
+    margin: 0 0 @space-4;
+    font-size: @bk-fs-xs;
+    font-weight: 400;
+    color: @color-text-secondary;
+  }
+
+  p { margin: 0 0 @space-4; }
+  code {
+    padding: 0 @space-4;
+    font-family: @font-family-code;
+    font-size: 0.92em;
+    background: @color-bg-subtle;
+    border-radius: @bk-radius-sm;
+  }
+}
+
+.dc-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: @space-8;
+  align-items: center;
+  margin-bottom: @space-8;
+}
+
+.dc-id {
+  font-family: @font-family-code;
+  font-size: @bk-fs-md;
+  font-weight: 600;
+  color: @color-heading;
+}
+
+.dc-qual {
+  font-size: @bk-fs-xs;
+  color: @color-text-secondary;
+}
+
+.dc-block {
+  font-size: @bk-fs-xs;
+  color: @color-status-failed;
+}
+
+.dc-head-right {
+  display: inline-flex;
+  gap: @space-8;
+  margin-left: auto;
+}
+
+.dc-q {
+  margin: 0 0 @space-16;
+  font-size: @bk-fs-xl;
+  font-weight: 400;
+  line-height: 1.7;
+  color: @color-heading;
+
+  strong { font-weight: 600; }
+}
+
+// 长格子排开之后的段落与列表（cell.jsx 的 structure）
+.dc-rich {
+  p { margin: 0 0 @space-4; }
+  ul, ol { padding-left: 1.3em; margin: 2px 0 @space-8; }
+  ul.is-numbered { padding-left: 0.2em; list-style: none; }
+  li + li { margin-top: 2px; }
+  > :last-child { margin-bottom: 0; }
+}
+
+// 问题开头那句当标题，细节排在下面
+.dc-q-more {
+  margin: calc(-1 * @space-8) 0 @space-16;
+  font-size: @bk-fs-md;
+  color: @color-text;
+}
+
+.dc-sec {
+  padding: @space-8 @space-12;
+  margin-bottom: @space-12;
+  background: @color-bg-subtle;
+  border-radius: @radius-control;
+}
+
+.dc-conclusion {
+  border-left: 3px solid @color-border;
+
+  &.is-decided { border-left-color: @color-status-success; }
+  &.is-provisional { border-left-color: @color-status-warning; }
+}
+
+// 引用：格子里的、汇总区的同一个样子。点了在右边看原文
+.dc-ref {
+  display: inline;
+  padding: 0 2px;
+  margin: 0;
+  font: inherit;
+  color: @color-link;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-bottom: 1px dashed currentColor;
+  border-radius: 0;
+
+  &:hover { color: @color-link; }
+}
+
+.dc-basis {
+  padding-top: @space-12;
+  margin-top: @space-20;
+  border-top: 1px solid @color-divider;
+}
+
+.dc-basis-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px @space-12;
+  align-items: baseline;
+  font-size: @bk-fs-sm;
+
+  & + & { margin-top: @space-4; }
+
+  .dc-ref { border-bottom-style: dotted; }
+}
+
+.dc-basis-label {
+  flex: 0 0 auto;
+  width: 28px;
+  font-size: @bk-fs-xs;
+  color: @color-text-secondary;
+}
+
+// ── 选项与表单 ───────────────────────────────────────
+.dc-options {
+  min-width: 0;
+  padding: 0;
+  margin: @space-16 0 @space-12;
+  border: 0;
+
+  legend {
+    padding: 0;
+    margin-bottom: @space-8;
+    font-size: @bk-fs-xs;
+    color: @color-text-secondary;
+  }
+}
+
+.dc-opt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: @space-8;
+  align-items: flex-start;
+  padding: @space-8 @space-12;
+  margin-bottom: @space-8;
+  border: 1px solid @color-border;
+  border-radius: @radius-control;
+
+  &.is-pickable { cursor: pointer; }
+  &.is-pickable:hover { border-color: @color-primary; }
+  &.is-on { background: @color-bg-subtle; border-color: @color-primary; }
+
+  input[type="radio"] {
+    flex: 0 0 auto;
+    margin: @space-4 0 0;
+    accent-color: @color-primary;
+  }
+
+  textarea { flex: 1 0 100%; }
+}
+
+.dc-opt-own {
+  display: flex;
+  gap: @space-8;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.dc-opt-mark {
+  flex: 0 0 auto;
+  min-width: 20px;
+  padding: 0 6px;
+  margin-top: 2px;
+  font-size: @bk-fs-xs;
+  line-height: 18px;
+  color: @color-text-secondary;
+  text-align: center;
+  border: 1px solid @color-border;
+  border-radius: @radius-tag;
+
+  &.is-recommend {
+    color: @color-primary;
+    border-color: @color-primary;
+  }
+}
+
+.dc-opt-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.dc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: @space-12;
+
+  > span {
+    font-size: @bk-fs-xs;
+    color: @color-text-secondary;
+  }
+}
+
+.dc-actions {
+  display: flex;
+  gap: @space-8;
+  align-items: center;
+  margin-top: @space-4;
+}
+
+.dc-reject {
+  padding: @space-12;
+  margin-bottom: @space-12;
+  background: @color-status-failed-bg;
+  border-radius: @radius-control;
+}
+
+// ── 已提交、等记录 ───────────────────────────────────
+.dc-subs {
+  padding: @space-12;
+  margin: @space-12 0;
+  background: @color-status-info-bg;
+  border-radius: @radius-control;
+
+  > h3 { color: @color-status-info; }
+}
+
+.dc-sub {
+  padding: @space-8 0;
+
+  & + & { border-top: 1px solid @color-divider; }
+}
+
+.dc-sub-head {
+  display: flex;
+  gap: @space-8;
+  align-items: center;
+
+  b { color: @color-heading; }
+
+  time {
+    font-size: @bk-fs-xs;
+    color: @color-text-secondary;
+  }
+
+  .bk-btn { margin-left: auto; }
+}
+
+.dc-sub-choice {
+  color: @color-text-secondary;
+}
+
+.dc-sub-words {
+  white-space: pre-wrap;
+
+  &::before { content: "「"; }
+  &::after { content: "」"; }
+}
+
+.dc-warn {
+  .bk-badge();
+}
+
+.dc-warn-text {
+  color: @color-status-failed;
+}
+
+// ── 原文 ─────────────────────────────────────────────
+.dc-refpanel {
+  display: flex;
+  flex: 0 0 440px;
+  flex-direction: column;
+  min-width: 0;
+  background: @color-white;
+  border-left: 1px solid @color-border;
+}
+
+// 窄屏下盖在卡片上，不把卡片挤成一条
+@container decisions (max-width: 1180px) {
+  .dc-refpanel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: ~"min(440px, 90cqw)";
+    box-shadow: @elevation-1;
+  }
+}
+
+.dc-refpanel-head {
+  display: flex;
+  gap: @space-8;
+  align-items: flex-start;
+  padding: @space-12 @space-16;
+  border-bottom: 1px solid @color-divider;
+}
+
+.dc-refpanel-title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  b {
+    font-size: @bk-fs-md;
+    color: @color-heading;
+  }
+
+  code {
+    overflow: hidden;
+    font-family: @font-family-code;
+    font-size: @bk-fs-xs;
+    color: @color-text-weak;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.dc-refpanel-kind {
+  font-size: @bk-fs-xs;
+  color: @color-text-secondary;
+}
+
+.dc-x {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: @bk-fs-xl;
+  line-height: 1;
+  color: @color-text-secondary;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: @bk-radius-sm;
+
+  &:hover { color: @color-heading; background: @color-bg-subtle; }
+}
+
+.dc-refpanel-body {
+  flex: 1;
+  min-height: 0;
+  padding: @space-12 @space-16;
+  overflow-y: auto;
+}
+
+.dc-refpanel-foot {
+  display: flex;
+  gap: @space-8;
+  padding: @space-8 @space-16;
+  border-top: 1px solid @color-divider;
+}
+
+.dc-refitem-head {
+  display: flex;
+  gap: @space-8;
+  align-items: center;
+  margin-bottom: @space-4;
+
+  b { font-family: @font-family-code; color: @color-heading; }
+}
+
+.dc-refitem-q {
+  margin-bottom: @space-8;
+  color: @color-heading;
+}
+
+// 引用原文：README 的一节、事实、DECISIONS 条目，表格与列表照原样
+.dc-md {
+  font-size: @bk-fs-sm;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+
+  h1, h2, h3, h4, h5, h6 {
+    margin: @space-12 0 @space-4;
+    font-size: @bk-fs-md;
+    font-weight: 600;
+    color: @color-heading;
+  }
+
+  h4 {
+    font-size: @bk-fs-xs;
+    font-weight: 400;
+    color: @color-text-secondary;
+  }
+
+  p, ul, ol, blockquote, table { margin: 0 0 @space-8; }
+  ul, ol { padding-left: 1.4em; }
+
+  blockquote {
+    padding: 0 @space-8;
+    color: @color-text-secondary;
+    border-left: 3px solid @color-border;
+  }
+
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    font-size: @bk-fs-xs;
+    border-collapse: collapse;
+  }
+
+  th, td {
+    min-width: 72px;
+    padding: 4px 6px;
+    text-align: left;
+    vertical-align: top;
+    border: 1px solid @color-divider;
+  }
+
+  th { background: @color-bg-thead; }
+
+  code {
+    padding: 0 @space-4;
+    font-family: @font-family-code;
+    font-size: 0.92em;
+    background: @color-bg-subtle;
+    border-radius: @bk-radius-sm;
+  }
+
+  img { max-width: 100%; }
+}
+
+// ── 提示 ─────────────────────────────────────────────
+.dc-toast-dock {
+  position: fixed;
+  right: 0;
+  bottom: @space-24;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.dc-toast {
+  max-width: ~"min(640px, 80vw)";
+  padding: @space-8 @space-16;
+  font-size: @bk-fs-md;
+  color: @color-text;
+  pointer-events: auto;
+  background: @color-white;
+  border: 1px solid @color-border;
+  border-left: 3px solid @color-status-success;
+  border-radius: @bk-radius-sm;
+  box-shadow: @elevation-1;
+
+  &.is-error { background: @color-status-failed-bg; border-left-color: @color-status-failed; }
+}
+
+
+.dc-status.is-needs-review,
+.dc-row-status.is-needs-review { color: @color-status-warning; }
+.dc-author { display: inline-flex; align-items: center; gap: @space-4; }
+.dc-author .dc-input { width: 9rem; }

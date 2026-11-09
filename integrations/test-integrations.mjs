@@ -30,7 +30,12 @@ async function fixture() {
     path.join(root, "docs", "kb", "concepts", "overview.md"),
     "---\ntitle: Workspace overview\n---\n\nThe workspace combines review and content.\n",
   );
-  await fs.writeFile(path.join(root, "docs", "features", "OVERVIEW", "FRS.json"), JSON.stringify({ key: "OVERVIEW" }));
+  await fs.writeFile(path.join(root, "docs", "features", "OVERVIEW", "FRS.json"), JSON.stringify({
+    key: "OVERVIEW", acceptance: ["AC1: Main view renders"],
+    verification: [{ id: "manual", ac: ["AC1"], required: true, manual: "Open the main view" }],
+  }));
+  await fs.writeFile(path.join(root, "docs", "features", "OVERVIEW", "README.md"),
+    "# Overview\n\n## Pending decisions\n\n| ID | Question | Blocking | Conclusion |\n| --- | --- | --- | --- |\n| A1 | Which view is default? | yes | |\n");
   await fs.writeFile(
     path.join(root, "docs", "reviews", "OVERVIEW.json"),
     JSON.stringify([
@@ -348,7 +353,7 @@ async function testMcp(root) {
   const list = await request("tools/list");
   assert.deepEqual(
     list.tools.map((tool) => tool.name).sort(),
-    ["builderharness_context", "builderharness_publish_plan", "builderharness_review_open", "builderharness_status"],
+    ["builderharness_context", "builderharness_decisions", "builderharness_publish_plan", "builderharness_review_open", "builderharness_status", "builderharness_verification"],
   );
 
   const called = await request("tools/call", {
@@ -377,6 +382,16 @@ async function testMcp(root) {
   assert.ok(evidence.sources.some((source) => source.file === "docs/kb/guides/import.md"));
   assert.ok(evidence.coverage.chars <= 2000);
   assert.ok(evidence.sources.every((source) => source.verifiedBehavior === false));
+
+  const decisions = await request("tools/call", { name: "builderharness_decisions", arguments: { feature: "OVERVIEW" } });
+  assert.equal(decisions.isError, undefined);
+  assert.equal(JSON.parse(decisions.content[0].text)[0].items[0].id, "A1");
+  const verification = await request("tools/call", { name: "builderharness_verification", arguments: { feature: "OVERVIEW" } });
+  assert.equal(verification.isError, undefined);
+  const report = JSON.parse(verification.content[0].text);
+  assert.equal(report.blocked, true);
+  assert.equal(report.results[0].status, "not-run");
+  assert.equal(report.decisions[0].id, "A1");
 
   child.stdin.end();
   rl.close();
