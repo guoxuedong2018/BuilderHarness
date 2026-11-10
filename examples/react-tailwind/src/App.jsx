@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Button, Card, EmptyState, SegmentedControl, Table, TableWrap, TBody, TD, TH, THead, TR } from "builderharness/ui";
 
 import { ActivityTable } from "./components/ActivityTable";
@@ -9,11 +9,12 @@ import { MetricCard } from "./components/MetricCard";
 import { NewExperimentDialog } from "./components/NewExperimentDialog";
 import { ReviewCanvas } from "./components/ReviewCanvas";
 import { Sidebar } from "./components/Sidebar";
-import { SpecView } from "./components/SpecView";
 import { Toast } from "./components/Toast";
 import { Topbar } from "./components/Topbar";
 import { EXPERIMENTS, METRICS, THREADS } from "./data";
 import { ROUTES, navigate, useHashRoute } from "./router";
+
+const SpecView = lazy(() => import("./components/SpecView"));
 
 const THEME_KEY = "helix:theme";
 const CREATED_KEY = "helix:created-experiments";
@@ -310,7 +311,13 @@ export default function App() {
   const view = useMemo(() => {
     if (path === ROUTES.experiments) return <Experiments experiments={[...created, ...EXPERIMENTS]} filter={filter} onFilter={setFilter} onNew={() => setNewOpen(true)} />;
     if (path === ROUTES.reviews) return <Reviews onToast={notify} />;
-    if (path === ROUTES.uiSpec) return <SpecView />;
+    if (path === ROUTES.uiSpec) {
+      return (
+        <Suspense fallback={<p role="status">Loading UI spec…</p>}>
+          <SpecView />
+        </Suspense>
+      );
+    }
     return <Overview onNew={() => setNewOpen(true)} onReview={() => navigate(ROUTES.reviews)} />;
   }, [created, filter, notify, path]);
 

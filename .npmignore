@@ -1,10 +1,6 @@
-# Local artifacts that must never be published inside the demo.
-examples/*/node_modules/
-examples/*/dist/
-examples/*/docs/reviews/*.json
-examples/*/docs/reviews/*.lock
 *.log
 .DS_Store
+docs/reviews/*.json*
 
 # Desktop release artifacts
 integrations/desktop/release/**

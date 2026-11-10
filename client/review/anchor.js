@@ -13,7 +13,7 @@
  * 浮层（AppModal / AppDrawer）被 iView 传送到 <body>，不在评审根子树内，
  * 检索范围需要单独处理，见 OVERLAY_SELECTOR 一节。
  *
- * @typedef {"exact" | "moved" | "approx" | "overlay-closed" | "lost"} AnchorConfidence
+ * @typedef {"exact" | "moved" | "approx" | "ambiguous" | "overlay-closed" | "lost"} AnchorConfidence
  * @typedef {{ file: string, line: number, col: number }} SourceLoc
  * @typedef {{ kind: "modal" | "drawer", title: string }} OverlayRef
  * @typedef {{
@@ -26,7 +26,9 @@
  *   frs: string,
  *   overlay: OverlayRef | null,
  *   label: string,
- *   selector: string
+ *   selector: string,
+ *   sharedSource?: boolean,
+ *   ambiguousAtCapture?: boolean,
  * }} CommentAnchor
  */
 
@@ -176,17 +178,18 @@ const OVERLAY_SELECTOR = ".app-modal, .app-drawer";
  * DOM 里。只判存在的话，浮层关着时 bySource 照样能查到里面的元素并判定为 exact，
  * 而隐藏元素的 getBoundingClientRect() 全为 0——Pin 会被静默钉到页面左上角。
  */
-function openOverlay() {
-  for (const el of document.querySelectorAll(OVERLAY_SELECTOR)) {
-    // 量子节点，不能量容器自身：容器的子节点（遮罩与浮层体）都是 position: fixed，
-    // 脱离普通流，容器高度**恒为 0**，拿它判可见会永远判成「关着」。
-    // 逐个子节点看有没有占位，不依赖 iView 的内部类名，Modal 与 Drawer 同样成立。
-    for (const child of el.children) {
-      const r = child.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) return el;
-    }
-  }
-  return null;
+function visible(el) {
+  const { width, height } = el.getBoundingClientRect();
+  return width > 0 && height > 0 && !["hidden", "collapse"].includes(getComputedStyle(el).visibility);
+}
+
+function openOverlays(ref) {
+  return Array.from(document.querySelectorAll(OVERLAY_SELECTOR)).filter((el) => {
+    const identity = overlayOf(el);
+    // iView 的容器可能是零高，浮层内容才有占位。
+    return identity.kind === ref.kind && (!ref.title || identity.title === ref.title) &&
+      Array.from(el.children).some(visible);
+  });
 }
 
 /** 浮层身份：kind 决定提示措辞，title 让提示能报出具体是哪一个。 */
@@ -234,7 +237,7 @@ export function createAnchor(el, clientX, clientY) {
   const base = anchored ?? el;
   const rect = base.getBoundingClientRect();
 
-  return {
+  const anchor = {
     v: 2,
     src: anchored ? locOf(anchored) : null,
     componentPath: componentPathOf(el),
@@ -249,58 +252,69 @@ export function createAnchor(el, clientX, clientY) {
     label: describeElement(el),
     selector: cssPath(el),
   };
+  if (anchor.src) {
+    const scopes = searchScopes(anchor);
+    const sources = bySource(scopes, anchor.src);
+    if (sources.length > 1) anchor.sharedSource = true;
+    if (matchingSources(sources, anchor).length > 1) anchor.ambiguousAtCapture = true;
+  }
+  return anchor;
 }
 
 /* ------------------------------ 重定位（补强） ------------------------------ */
 
-function bySource(loc) {
+function eligible(el, scope) {
+  return !el.closest("[data-review-ui]") && el.closest(OVERLAY_SELECTOR) === scope.closest(OVERLAY_SELECTOR) && visible(el);
+}
+
+function inScopes(scopes, selector, match = () => true) {
+  const matches = scopes.flatMap((scope) => {
+    const elements = Array.from(scope.querySelectorAll(selector));
+    if (scope.matches(selector)) elements.unshift(scope);
+    return elements.filter((el) => match(el) && eligible(el, scope));
+  });
+  return [...new Set(matches)];
+}
+
+function bySource(scopes, loc) {
   const v = CSS.escape(formatLoc(loc));
-  return document.querySelector(`[data-use="${v}"], [data-loc="${v}"]`);
+  return inScopes(scopes, `[data-use="${v}"], [data-loc="${v}"]`);
 }
 
-/**
- * L2/L3 的检索范围。浮层里的锚点必须在浮层内找：它不在评审根的子树里，
- * 拿评审根去 querySelector 是永远找不到的。
- */
-function searchScope(anchor) {
-  if (anchor.overlay) return openOverlay();
-  return document.querySelector("[data-review-root]");
+function searchScopes(anchor) {
+  if (anchor.overlay) return openOverlays(anchor.overlay);
+  const root = document.querySelector("[data-review-root]");
+  if (!root) return [];
+  const selector = `[data-frs="${CSS.escape(anchor.frs)}"]`;
+  if (root.matches(selector)) return [root];
+  const regions = inScopes([root], selector);
+  return regions.length ? regions : [root];
 }
 
-function bySemantics(anchor) {
-  if (!anchor.role || !anchor.name) return null;
-  const root = searchScope(anchor) ?? document.body;
-
-  // 第一轮只按「角色 + 可访问名称」筛，这两项对改样式/换布局免疫
-  const candidates = Array.from(root.querySelectorAll("*")).filter(
-    (el) => roleOf(el) === anchor.role && accessibleName(el) === anchor.name,
-  );
-  if (candidates.length === 1) return candidates[0];
-  if (candidates.length === 0) return null;
-
-  // 多个同名同角色元素时才用组件路径消歧。
-  // 组件路径不能当硬过滤条件：设了 inheritAttrs: false 的组件拿不到 data-use，
-  // 硬过滤会把正确候选也筛掉。
-  const leaf = anchor.componentPath[anchor.componentPath.length - 1];
-  if (!leaf) return null;
-  const narrowed = candidates.filter((el) => componentPathOf(el).includes(leaf));
-
-  // 仍然只认唯一命中：区分不开就宁可降级，也不要猜错位置
-  return narrowed.length === 1 ? narrowed[0] : null;
+function sameElement(el, anchor) {
+  return roleOf(el) === anchor.role && accessibleName(el) === anchor.name;
 }
 
-function bySelector(anchor) {
-  if (!anchor.selector) return null;
-  const scope = anchor.overlay
-    ? openOverlay()
-    : (document.querySelector(`[data-frs="${CSS.escape(anchor.frs)}"]`) ??
-      document.querySelector("[data-review-root]"));
-  if (!scope) return null;
-  try {
-    return scope.querySelector(anchor.selector);
-  } catch {
-    return null;
+function matchingSources(sources, anchor) {
+  if (!anchor.role) return sources;
+  return sources.flatMap((el) => {
+    const matches = Array.from(el.querySelectorAll("*")).filter(
+      (child) => anchoredAncestor(child) === el && sameElement(child, anchor) && eligible(child, el),
+    );
+    if (sameElement(el, anchor)) matches.push(el);
+    return matches.map(() => el);
+  });
+}
+
+function bySemantics(scopes, anchor) {
+  if (!anchor.role || !anchor.name) return [];
+  const candidates = inScopes(scopes, "*", (el) => sameElement(el, anchor));
+  const leaf = anchor.componentPath.at(-1);
+  if (candidates.length > 1 && leaf) {
+    const narrowed = candidates.filter((el) => componentPathOf(el).includes(leaf));
+    if (narrowed.length) return narrowed;
   }
+  return candidates;
 }
 
 /**
@@ -312,36 +326,31 @@ function bySelector(anchor) {
  * @returns {{ el: HTMLElement | null, confidence: AnchorConfidence }}
  */
 export function relocate(anchor) {
-  // 浮层里的锚点，浮层没开时直接判定，不能往下走三层链：浮层是 display: none 而非
-  // 被移除，L1 照样能按源码坐标查到那个元素并报 exact，Pin 则钉在 0,0。
-  // 这不是「丢失」，重新打开浮层就还在，如实说清楚即可。
-  if (anchor.overlay && !openOverlay()) {
+  const scopes = searchScopes(anchor);
+  if (anchor.overlay && !scopes.length) {
     return { el: null, confidence: "overlay-closed" };
   }
+  if (anchor.ambiguousAtCapture) return { el: null, confidence: "ambiguous" };
 
-  if (anchor.src) {
-    const el = bySource(anchor.src);
-    if (el) return { el, confidence: "exact" };
+  const sources = anchor.src ? bySource(scopes, anchor.src) : [];
+  const exact = matchingSources(sources, anchor);
+  if (exact.length === 1) return { el: exact[0], confidence: "exact" };
+  if (exact.length > 1) return { el: null, confidence: "ambiguous" };
+
+  const semantic = bySemantics(scopes, anchor);
+  if (semantic.length === 1) return { el: semantic[0], confidence: "moved" };
+  if (semantic.length > 1 || sources.length > 1 || scopes.length > 1) {
+    return { el: null, confidence: "ambiguous" };
   }
-
-  const semantic = bySemantics(anchor);
-  if (semantic) return { el: semantic, confidence: "moved" };
-
-  const selected = bySelector(anchor);
-  if (selected) return { el: selected, confidence: "approx" };
-
-  // 浮层开着却三层都没命中：退回浮层本身近似定位，别掉进下面的页面区域兜底——
-  // 那会把 Pin 钉到一个和批注无关的位置上。
-  if (anchor.overlay) {
-    return { el: openOverlay(), confidence: "approx" };
-  }
-
-  const region =
-    document.querySelector(`[data-frs="${CSS.escape(anchor.frs)}"]`) ??
-    document.querySelector("[data-review-root]");
-  if (region) return { el: region, confidence: "approx" };
-
-  return { el: null, confidence: "lost" };
+  let selected;
+  try {
+    if (anchor.selector) {
+      const candidates = inScopes(scopes, anchor.selector);
+      if (candidates.length === 1 && (!anchor.role || sameElement(candidates[0], anchor))) selected = candidates[0];
+    }
+  } catch { /* A saved selector can be invalid after a markup change. */ }
+  const el = selected ?? scopes[0];
+  return { el: el ?? null, confidence: el ? "approx" : "lost" };
 }
 
 /** 把重定位结果换算成视口坐标，用于渲染 Pin。 */
@@ -355,8 +364,9 @@ export function pinPosition(anchor, el) {
 
 export const CONFIDENCE_HINT = {
   exact: null,
-  moved: "源码位置已变，按组件语义重新定位",
+  moved: "已按组件语义重新定位",
   approx: "定位为近似结果，请确认锚定元素",
+  ambiguous: "有多个可能匹配的元素，无法确定原批注位置",
   "overlay-closed": "锚点在浮层内，重新打开该浮层即可定位",
   lost: "锚定元素已不存在",
 };
@@ -378,8 +388,7 @@ export function confidenceHint(anchor, confidence) {
 
 /**
  * 旧批注读盘时自动升级，不需要手工迁移、不丢数据。
- * v1 没有源码与组件信息，首次重定位只能走 L3，会显示为 approx；
- * 重新圈选或回复后即可补齐高层坐标。
+ * 旧记录没有组件语义；宿主写入的 loc 仍可用于匹配源码。
  * @returns {CommentAnchor}
  */
 export function migrateAnchor(raw) {
@@ -388,7 +397,7 @@ export function migrateAnchor(raw) {
 
   return {
     v: 2,
-    src: null,
+    src: typeof a.loc === "string" ? parseLoc(a.loc) : null,
     componentPath: [],
     role: "",
     name: "",

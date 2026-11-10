@@ -62,6 +62,28 @@ test("feature verification reports required evidence and invalidates it when an 
   assert.match(cli("verify", key).stdout, /^failed save/);
 }));
 
+test("demo route evidence follows the shared inputs and the separately loaded UI spec", () => {
+  const demo = path.join(root, "examples/react-tailwind");
+  const source = new URL("../pipeline/lib/route-source.mjs", import.meta.url);
+  const program = `
+    const { sourcesForRoute } = await import(process.argv[1]);
+    const paths = ["/experiments", "/ui-spec", "/missing"];
+    console.log(JSON.stringify(await Promise.all(paths.map(route => sourcesForRoute(process.cwd(), route)))));
+  `;
+  const result = spawnSync(process.execPath, ["--input-type=module", "-e", program, source.href], {
+    cwd: demo, encoding: "utf8", env: { ...process.env, BUILDERHARNESS_ROOT: demo },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const [experiments, spec, unknown] = JSON.parse(result.stdout);
+  assert.deepEqual(unknown, []);
+  for (const file of ["src/App.jsx", "tailwind.config.cjs", "postcss.config.cjs", "../../ui-spec/tokens.css", "../../ui-spec/impl/react/index.ts"]) {
+    assert.ok(experiments.includes(path.normalize(file)), file);
+  }
+  const specView = path.normalize("src/components/SpecView.jsx");
+  assert.ok(!experiments.includes(specView));
+  assert.ok(spec.includes(specView));
+});
+
 test("preflight and deployment bind to an artifact and refuse a mismatched project", () => fixture(async (cwd, write, cli) => {
   await write("dist/index.html", "<h1>Synthetic fixture</h1>");
   await write("dist/old.js", 'const endpoint = "/__promo/config";');

@@ -166,7 +166,7 @@ function TokenValue({ children }) {
   return <code className="break-all rounded-sm bg-surface-active px-1 py-0.5 font-mono text-caption text-secondary">{children}</code>;
 }
 
-function SpecView() {
+export default function SpecView() {
   const [active, setActive] = useState("foundations");
   const [segment, setSegment] = useState("preview");
   const [dialog, setDialog] = useState(null);
@@ -811,5 +811,3 @@ function SpecView() {
     </div>
   );
 }
-
-export { SpecView };

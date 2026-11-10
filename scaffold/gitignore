@@ -1,5 +1,7 @@
 # BuilderHarness generated artifacts
 docs/reviews/*.json
+docs/reviews/*.json.lock
+docs/reviews/*.json.*.tmp
 !docs/reviews/.gitignore
 docs/prd/
 docs/features/*/shots/

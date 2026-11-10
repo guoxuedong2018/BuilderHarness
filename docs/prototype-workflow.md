@@ -84,11 +84,13 @@ builderharness promo status --json
 
 ## 走通样例
 
-在 BuilderHarness 源码根目录安装依赖，运行 `npm run demo`。另开终端进入
-`examples/react-tailwind`，运行 `node ../../bin/builderharness.mjs verify EXPERIMENTS`，
-再渲染 `docs/promo/EXPERIMENTS`。在原型顶部的「待决清单」查看样例问题。
-生产构建在源码根运行 `npm run build:demo`，然后用
-`node bin/builderharness.mjs preflight --dir examples/react-tailwind/dist` 检查。
+在 BuilderHarness 源码根目录安装依赖后，运行 `npm run check:demo`。命令会校验 FRS，
+为两条浏览器验收场景启停本地原型，再构建并预检产物。需要本机安装 Chrome 或 Chromium，
+且 5173 端口空闲。
+
+手动体验时，在源码根目录运行 `npm run demo`，从原型顶部的「待决清单」查看样例问题。
+另开终端进入 `examples/react-tailwind`，可用 `node ../../bin/builderharness.mjs verify EXPERIMENTS`
+复用运行中的服务，也可渲染 `docs/promo/EXPERIMENTS`。
 
 ## 分组决定与引用
 
