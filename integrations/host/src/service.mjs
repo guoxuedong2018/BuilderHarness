@@ -7,6 +7,7 @@ import { addReview, readContext, readOpenReviews, readPublishPlan, readStatus, r
 import { readEnv } from "./env.mjs";
 import { resolveKitRoot, runKit } from "./kit.mjs";
 import { detectPrototype, detectStack, devCommand, installCommand } from "./prototype.mjs";
+import { isReviewWrite } from "./review-request.mjs";
 
 const prototypeProcesses = new Map();
 
@@ -102,8 +103,17 @@ function startPreviewProxy(target) {
   const port = Number(upstream.port || (upstream.protocol === "https:" ? 443 : 80));
 
   const server = http.createServer((req, res) => {
+    const headers = { ...req.headers, host: upstream.host };
+    if (req.method === "POST" && req.url?.startsWith("/__proto_review/")) {
+      if (!isReviewWrite(req)) {
+        res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
+        return res.end(JSON.stringify({ error: "请从当前原型页面提交批注或决定" }));
+      }
+      // Only translate an origin already verified against the public preview URL.
+      if (headers.origin) headers.origin = upstream.origin;
+    }
     const proxyReq = http.request(
-      { host, port, path: req.url, method: req.method, headers: { ...req.headers, host: upstream.host } },
+      { host, port, path: req.url, method: req.method, headers },
       (proxyRes) => {
         res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
         proxyRes.pipe(res);

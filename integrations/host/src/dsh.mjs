@@ -1,4 +1,5 @@
 import { createBuilderHarnessService } from "./service.mjs";
+import { isReviewWrite } from "./review-request.mjs";
 
 export const name = "builderharness";
 export const inject = ["tools", "workingDirectory"];
@@ -453,6 +454,11 @@ export function apply(ctx, config = {}) {
               if (req.method !== "POST") {
                 res.statusCode = 405;
                 res.end("Method Not Allowed");
+                return;
+              }
+              if (!isReviewWrite(req)) {
+                res.statusCode = 403;
+                res.end("Forbidden");
                 return;
               }
               try {

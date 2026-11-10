@@ -65,8 +65,8 @@ export function ReviewBar({ tools }) {
         </a>
 
         {!snap.persistent && (
-          <span className="rb-warn" title="未连接开发服务，评论不会写入 docs/reviews（刷新丢失）">
-            <Icon name="warn" size={12} /> 未持久化
+          <span className="rb-warn" title={snap.memoryOnly ? "评论仅存于当前会话，刷新后丢失" : "请检查开发服务连接"}>
+            <Icon name="warn" size={12} /> {snap.memoryOnly ? "未持久化" : "评审服务未连接"}
           </span>
         )}
         {totalOpen > 0 && <span className="rb-count">全局待解决 {totalOpen}</span>}

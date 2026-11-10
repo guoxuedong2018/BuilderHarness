@@ -18,6 +18,7 @@ import path from "node:path";
 
 import { listDecisions, readDecisions, resolveDecision } from "./lib/decisions.mjs";
 import { REPO_ROOT, REVIEWS_DIR, WEB_DIR } from "./lib/paths.mjs";
+import { editReviews, readComments } from "../integrations/host/src/review-files.mjs";
 
 const AUTHOR = "Agent";
 const WEB_REL = path.relative(REPO_ROOT, WEB_DIR).split(path.sep).join("/");
@@ -28,13 +29,10 @@ async function load() {
   const files = (await fs.readdir(REVIEWS_DIR).catch(() => [])).filter((f) => f.endsWith(".json"));
   const out = [];
   for (const f of files) {
-    const parsed = JSON.parse(await fs.readFile(path.join(REVIEWS_DIR, f), "utf8"));
-    out.push({ file: f, comments: Array.isArray(parsed) ? parsed : (parsed.comments ?? []) });
+    out.push({ file: f, comments: (await readComments(path.join(REVIEWS_DIR, f))).filter(Boolean) });
   }
   return out;
 }
-
-const save = (store) => fs.writeFile(path.join(REVIEWS_DIR, store.file), `${JSON.stringify(store.comments, null, 2)}\n`, "utf8");
 
 /**
  * 坐标是相对原型源码根；补上工程相对路径，Agent 直接能打开。
@@ -85,19 +83,30 @@ async function resolve(ids, note) {
   if (!ids.length) throw new Error("要给批注 id：builderharness review resolve <id…> [--note \"改了什么\"]");
   const hits = await find(ids);
   const at = new Date().toISOString();
-  for (const { comment } of hits) {
-    comment.status = "resolved";
-    if (note) (comment.replies ??= []).push({ author: AUTHOR, body: note, at });
+  for (const store of new Set(hits.map((h) => h.store))) {
+    const targets = hits.filter((hit) => hit.store === store).map(({ comment }) => comment.id);
+    await editComments(store, targets, (comment) => {
+      comment.status = "resolved";
+      if (note) (comment.replies ??= []).push({ author: AUTHOR, body: note, at });
+    });
   }
-  for (const store of new Set(hits.map((h) => h.store))) await save(store);
   console.log(`已解决 ${hits.length} 条：${ids.join("、")}`);
+}
+
+function editComments(store, ids, change) {
+  return editReviews(path.join(REVIEWS_DIR, store.file), (latest) => {
+    const targets = ids.map((id) => latest.find((comment) => comment?.id === id));
+    if (targets.includes(undefined)) throw new Error("批注已删除，请重新查看批注列表");
+    for (const comment of targets) change(comment);
+  });
 }
 
 async function reply(id, body) {
   if (!id || !flat(body)) throw new Error("用法：builderharness review reply <id> \"回复内容\"");
-  const [{ store, comment }] = await find([id]);
-  (comment.replies ??= []).push({ author: AUTHOR, body: body.trim(), at: new Date().toISOString() });
-  await save(store);
+  const [{ store }] = await find([id]);
+  await editComments(store, [id], (comment) => {
+    (comment.replies ??= []).push({ author: AUTHOR, body: body.trim(), at: new Date().toISOString() });
+  });
   console.log(`已回复 ${id}`);
 }
 

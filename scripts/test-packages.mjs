@@ -7,13 +7,19 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "bh-packages-"));
+const tmp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "bh-packages-")));
 const env = { ...process.env, NPM_CONFIG_AUDIT: "false", NPM_CONFIG_FUND: "false" };
 const metrics = { node: process.version, measuredAt: new Date().toISOString() };
 function run(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, env, encoding: "utf8", maxBuffer: 12 * 1024 * 1024 });
   assert.equal(result.status, 0, `${command} ${args.join(" ")}\n${result.stderr}\n${result.stdout}`);
   return result.stdout;
+}
+function pack(cwd) {
+  const result = JSON.parse(run("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", tmp], cwd));
+  const [artifact] = Array.isArray(result) ? result : Object.values(result);
+  assert.ok(artifact?.filename, "npm pack should return a tarball name");
+  return artifact;
 }
 async function size(dir) {
   let bytes = 0;
@@ -35,15 +41,17 @@ try {
     assert.equal(archive.status, 0);
     const extract = spawnSync("tar", ["-x", "-C", baseline], { input: archive.stdout });
     assert.equal(extract.status, 0);
-    const artifact = JSON.parse(run("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", tmp], baseline))[0];
+    const artifact = pack(baseline);
     await fs.writeFile(path.join(consumer, "package.json"), '{"private":true}\n');
     const start = performance.now();
     run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", path.join(tmp, artifact.filename)], consumer);
     metrics.baseline = { version: artifact.version, installedBytes: await size(path.join(consumer, "node_modules")), installMs: Math.round(performance.now() - start) };
     console.log(`BASELINE ${JSON.stringify(metrics.baseline)}`);
   }
-  const core = JSON.parse(run("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", tmp], root))[0];
-  const browser = JSON.parse(run("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", tmp], path.join(root, "packages/browser")))[0];
+  const core = pack(root);
+  const browser = pack(path.join(root, "packages/browser"));
+  assert.ok(core.files.some(({ path }) => path === "scaffold/starter/vite.config.js"));
+  assert.ok(core.files.every(({ path }) => !path.startsWith("examples/react-tailwind/")));
   const consumer = path.join(tmp, "consumer");
   await fs.mkdir(consumer);
   await fs.writeFile(path.join(consumer, "package.json"), '{"private":true,"type":"module"}\n');
@@ -110,9 +118,34 @@ try {
   assert.equal((await fs.lstat(path.join(desktop, "node_modules/builderharness"))).isSymbolicLink(), false);
   assert.equal((await fs.lstat(path.join(desktop, "node_modules/@builderharness/browser"))).isSymbolicLink(), false);
   console.log(run(process.execPath, ["--input-type=module", "-e", smoke(false)], desktop).trim());
+  const vite = await import(pathToFileURL(path.join(desktop, "node_modules/vite/dist/node/index.js")).href);
+  const dev = await vite.createServer({ root: desktop, server: { host: "127.0.0.1", port: 5417, hmr: false } });
+  try {
+    await dev.listen();
+    const origin = `http://127.0.0.1:${dev.httpServer.address().port}`;
+    const read = async (file) => {
+      const response = await fetch(origin + file, { signal: AbortSignal.timeout(15_000) });
+      const body = await response.text();
+      assert.ok(response.ok, `${file} returned ${response.status}\n${body}`);
+      return body;
+    };
+    const fromKit = (file) => "/@fs/" + vite.normalizePath(path.join(desktop, "node_modules/builderharness", file));
+    assert.match(await read("/src/App.jsx"), /data-loc/);
+    const main = await read("/src/main.jsx");
+    assert.match(main, /BuilderHarnessRoot/);
+    assert.match(await read(fromKit("client/adapters/react.jsx")), /BuilderHarnessRoot/);
+    assert.match(await read(fromKit("client/adapters/react.less")), /\.rs-content/);
+    const react = main.match(/"(\/[^"]+\/deps\/react\.js(?:\?[^"]*)?)"/)?.[1];
+    assert.ok(react, "starter should load prebundled React");
+    await read(react);
+  } finally {
+    if (dev.httpServer.listening) await dev.waitForRequestsIdle();
+    await dev.close();
+  }
   run("npm", ["run", "build"], desktop);
   assert.ok((await fs.stat(path.join(desktop, "dist/index.html"))).isFile());
+  run(process.execPath, ["node_modules/builderharness/bin/builderharness.mjs", "preflight"], desktop);
   assert.equal(await fs.stat(path.join(kitRoot, "packages/browser/node_modules")).then(() => true, () => false), false);
-  console.log("PASS actual desktop starter installs external file dependencies and builds without modifying the toolkit");
+  console.log("PASS actual desktop starter installs external dependencies, transforms in dev and passes build preflight");
   if (process.argv.includes("--output")) await fs.writeFile(process.argv[process.argv.indexOf("--output") + 1], JSON.stringify(metrics, null, 2) + "\n");
 } finally { await fs.rm(tmp, { recursive: true, force: true }); }

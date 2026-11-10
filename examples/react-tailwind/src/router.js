@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
+import { ROUTES } from "./config/frs-map.js";
 
-export const ROUTES = {
-  overview: "/overview",
-  experiments: "/experiments",
-  reviews: "/reviews",
-  uiSpec: "/ui-spec",
-};
+export { ROUTES };
 
 export function currentPath() {
   return window.location.hash.replace(/^#/, "") || ROUTES.overview;
@@ -19,11 +15,7 @@ export function navigate(path) {
 export function useHashRoute() {
   const [path, setPath] = useState(currentPath);
 
-  useEffect(() => {
-    const onChange = () => setPath(currentPath());
-    window.addEventListener("hashchange", onChange);
-    return () => window.removeEventListener("hashchange", onChange);
-  }, []);
+  useEffect(() => router.subscribe(setPath), []);
 
   return path;
 }

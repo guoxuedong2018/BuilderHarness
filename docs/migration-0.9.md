@@ -125,7 +125,8 @@ npm run test:agents -- --host claude
 Package tests install real tarballs in clean temporary consumers and check base
 dependency absence, CLI execution and non-hoisted optional runtime/Babel resolution.
 They also configure the actual desktop starter against an external unpacked kit,
-install its local dependencies and run its production build without launching Electron.
+install its local dependencies, transform the dev entry and review styles, and
+build and scan its production output.
 Real-host tests create a synthetic non-Vite project, check a decision conflict and
 alternative, then open a new session for a small copy change and execute its tests.
 They retain traces for inspection and return nonzero for missing hosts/authentication,

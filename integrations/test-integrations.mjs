@@ -140,7 +140,7 @@ async function testPrototypeDetection() {
       [
         'import { createServer } from "node:http";',
         "const port = 5399;",
-        'createServer((_, res) => res.end("fixture ok")).listen(port, () => console.log(`ready http://localhost:${port}/`));',
+        'createServer((req, res) => res.end(req.url.startsWith("/__proto_review/") ? req.headers.origin : "fixture ok")).listen(port, () => console.log(`ready http://localhost:${port}/`));',
       ].join("\n"),
     );
     await fs.writeFile(path.join(dir, "web", "package.json"), JSON.stringify({ scripts: { dev: "node server.mjs" } }));
@@ -149,6 +149,11 @@ async function testPrototypeDetection() {
     assert.equal(running.target, "http://localhost:5399/");
     assert.match(running.url, /^http:\/\/127\.0\.0\.1:\d+\/$/);
     assert.equal(await (await fetch(running.url)).text(), "fixture ok");
+    const previewWrite = (origin) => fetch(new URL("/__proto_review/create", running.url), {
+      method: "POST", headers: { origin, "content-type": "application/json" }, body: "{}",
+    });
+    assert.equal(await (await previewWrite(new URL(running.url).origin)).text(), new URL(running.target).origin);
+    assert.equal((await previewWrite(new URL(running.target).origin)).status, 403);
     assert.equal(createBuilderHarnessService().stopPrototype(dir).stopped, true);
 
     await fs.writeFile(

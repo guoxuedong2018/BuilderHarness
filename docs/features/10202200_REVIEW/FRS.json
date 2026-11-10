@@ -103,6 +103,26 @@
           "ac": [
             "AC4"
           ]
+        },
+        {
+          "id": "FP4",
+          "name": "批注保存与定位保护",
+          "origin": "online-page-new",
+          "interaction": [
+            "服务端确认保存后更新批注列表。保存失败时保留输入并就地显示原因。",
+            "同一源码坐标出现多个实例时，使用元素语义确认唯一实例。无法区分时保留抽屉条目并显示定位提示。"
+          ],
+          "value": [
+            "浏览器、CLI 和宿主插件串行更新同一个批注文件。回复和解决状态在当前记录上分别更新。"
+          ],
+          "permission": [
+            "浏览器批注写入仅接受同源 JSON 请求。"
+          ],
+          "ac": [
+            "AC6",
+            "AC7",
+            "AC8"
+          ]
         }
       ]
     }
@@ -113,11 +133,48 @@
     "AC2: 点「评论」后按钮显示「点选中」，原型光标变为十字；Esc 可退出。",
     "AC3: 抽屉中每条批注都能看到作者、时间、路由和 FRS。",
     "AC4: 解决批注后 5 秒内可撤销，超时后可从已解决列表重新打开。",
-    "AC5: 内嵌模式下原型不再渲染自己的评审条，只保留操作台一条。"
+    "AC5: 内嵌模式下原型不再渲染自己的评审条，只保留操作台一条。",
+    "AC6: 同一需求并发保存的批注与回复完整保留。保存失败时，重试可继续使用原输入。",
+    "AC7: 重复元素能唯一确认时定位到对应实例，无法区分时显示提示并隐藏 Pin。",
+    "AC8: 异源和非 JSON 写入返回拒绝结果，文件内容保持原样。"
   ],
   "verification": [
     "npm run test:integrations",
-    "DSH 手动验收：examples/react-tailwind 的 /overview"
+    "DSH 手动验收：examples/react-tailwind 的 /overview",
+    {
+      "id": "review-writes",
+      "ac": ["AC6", "AC8"],
+      "required": true,
+      "command": ["node", "--test", "scripts/test-review.mjs"],
+      "inputs": [
+        "server/review-server.js",
+        "integrations/host/src/review-files.mjs",
+        "integrations/host/src/review-request.mjs",
+        "integrations/host/src/project.mjs",
+        "pipeline/review.mjs",
+        "scripts/test-review.mjs"
+      ]
+    },
+    {
+      "id": "review-browser",
+      "ac": ["AC6", "AC7"],
+      "required": true,
+      "command": ["node", "--test", "scripts/test-review-browser.mjs"],
+      "inputs": [
+        "client/review/anchor.js",
+        "client/review/store.js",
+        "client/review/CommentLayer.jsx",
+        "client/review/CommentLayer.less",
+        "client/review/CommentDrawer.jsx",
+        "client/review/CommentDrawer.less",
+        "client/review/ReviewBar.jsx",
+        "server/review-server.js",
+        "integrations/host/src/review-files.mjs",
+        "integrations/host/src/review-request.mjs",
+        "examples/react-tailwind/src/components/Sidebar.jsx",
+        "scripts/test-review-browser.mjs"
+      ]
+    }
   ],
   "openQuestions": [
     "撤销窗口 5 秒是否足够 — 影响误操作恢复 — 建议交互确认"

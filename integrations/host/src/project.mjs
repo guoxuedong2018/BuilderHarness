@@ -3,6 +3,7 @@ import path from "node:path";
 import { readEnv } from "./env.mjs";
 import { detectPrototype } from "./prototype.mjs";
 import { readTaskContext } from "./task-context.mjs";
+import { editReviews, readComments, reviewFile } from "./review-files.mjs";
 
 const MAX_SCAN_FILES = 400;
 const MAX_CONTEXT_FILES = 20;
@@ -64,23 +65,13 @@ function excerptOf(text) {
   return body.slice(0, MAX_EXCERPT);
 }
 
-async function readComments(file) {
-  const raw = await fs.readFile(file, "utf8");
-  const parsed = JSON.parse(raw);
-  if (Array.isArray(parsed)) return parsed;
-  if (parsed && Array.isArray(parsed.comments)) return parsed.comments;
-  throw new Error(`Unrecognized review file: ${file}`);
-}
-
 export async function addReview(inputRoot, { frs = "APP_SHELL", route = "/", body, author = "BuilderHarness Agent", anchor = null } = {}) {
   const root = resolveRoot(inputRoot);
   const text = String(body || "").trim();
   if (!text) throw new Error("review body is required");
   const dir = path.join(root, "docs", "reviews");
-  await fs.mkdir(dir, { recursive: true });
   const safe = String(frs || "APP_SHELL").replace(/[^a-zA-Z0-9_-]/g, "_");
-  const file = path.join(dir, `${safe}.json`);
-  const comments = (await statSafe(file)) ? await readComments(file) : [];
+  const file = reviewFile(dir, safe);
   const comment = {
     id: `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
     frs: safe,
@@ -92,8 +83,7 @@ export async function addReview(inputRoot, { frs = "APP_SHELL", route = "/", bod
     createdAt: new Date().toISOString(),
     replies: [],
   };
-  comments.push(comment);
-  await writeJson(file, comments);
+  await editReviews(file, (comments) => comments.push(comment));
   return { file: path.relative(root, file), comment };
 }
 
@@ -106,27 +96,24 @@ export async function resolveReview(inputRoot, { id, note = "", author = "Builde
   for (const file of files) {
     const comments = await readComments(file).catch(() => null);
     if (!comments) continue;
-    const comment = comments.find((item) => item && item.id === target);
-    if (!comment) continue;
-    const changed = comment.status !== "resolved" || String(note || "").trim();
-    if (changed) {
-      comment.status = "resolved";
-      comment.resolvedAt = new Date().toISOString();
-      if (String(note || "").trim()) {
-        comment.replies = Array.isArray(comment.replies) ? comment.replies : [];
-        comment.replies.push({ author: String(author || "BuilderHarness Agent"), body: String(note).trim(), at: comment.resolvedAt });
+    if (!comments.some((item) => item?.id === target)) continue;
+    const comment = await editReviews(file, (latest) => {
+      const item = latest.find((entry) => entry?.id === target);
+      if (!item) return null;
+      const message = String(note || "").trim();
+      if (item.status !== "resolved" || message) {
+        item.status = "resolved";
+        item.resolvedAt = new Date().toISOString();
+        if (message) {
+          item.replies = Array.isArray(item.replies) ? item.replies : [];
+          item.replies.push({ author: String(author || "BuilderHarness Agent"), body: message, at: item.resolvedAt });
+        }
       }
-      await writeJson(file, comments);
-    }
-    return { file: path.relative(root, file), comment };
+      return item;
+    });
+    if (comment) return { file: path.relative(root, file), comment };
   }
   throw new Error(`review not found: ${target}`);
-}
-
-async function writeJson(file, value) {
-  const temp = `${file}.tmp-${process.pid}-${Date.now()}`;
-  await fs.writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await fs.rename(temp, file);
 }
 
 async function reviewSummary(root) {

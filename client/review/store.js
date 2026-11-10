@@ -42,6 +42,7 @@ export const reviewState = proxy({
   comments: [],
   /** 是否已连上 dev 落盘服务 */
   persistent: false,
+  memoryOnly: false,
   /** @type {string | null} */
   activeCommentId: null,
   author: readAuthor(),
@@ -49,41 +50,51 @@ export const reviewState = proxy({
   route: "/",
 });
 
-function genId() {
-  return `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+export function newReviewId() {
+  const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+  return `c_${id}`;
 }
 
+const hydrate = (comment) => ({
+  ...comment,
+  anchor: migrateAnchor(comment.anchor),
+  replies: Array.isArray(comment.replies) ? comment.replies : [],
+});
+let readSequence = 0;
+
 export async function loadAll() {
+  const sequence = ++readSequence;
   try {
     const r = await fetch(`${API}/all`);
-    if (!r.ok) return;
-    const j = await r.json();
-    // 旧版本落盘的 v1 锚点在这里统一升级，调用方只会看到 v2
-    reviewState.comments = (j.comments ?? []).filter(Boolean).map((c) => ({
-      ...c,
-      anchor: migrateAnchor(c.anchor),
-      replies: Array.isArray(c.replies) ? c.replies : [],
-    }));
+    const missing = r.status === 404 || (r.ok && r.headers.get("content-type")?.includes("text/html"));
+    if (sequence !== readSequence) return;
+    if (missing) {
+      reviewState.memoryOnly = true;
+      reviewState.persistent = false;
+      return;
+    }
+    if (!r.ok) throw new Error("Could not load reviews");
+    const { comments } = await r.json();
+    if (sequence !== readSequence) return;
+    reviewState.comments = (comments ?? []).filter(Boolean).map(hydrate);
+    reviewState.memoryOnly = false;
     reviewState.persistent = true;
   } catch {
-    reviewState.persistent = false;
+    if (sequence === readSequence) reviewState.persistent = false;
   }
 }
 
-function apiUpsert(c) {
-  fetch(`${API}/upsert`, {
+async function write(action, body) {
+  const response = await fetch(`${API}/${action}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(c),
-  }).catch(() => {});
-}
-
-function apiDelete(c) {
-  fetch(`${API}/delete`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: c.id, frs: c.frs }),
-  }).catch(() => {});
+    body: JSON.stringify(body),
+  }).catch(() => { throw new Error("请检查开发服务后重试"); });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok !== true) throw new Error(data.error || "请检查开发服务后重试");
+  ++readSequence; // An earlier GET must not replace a newly saved comment.
+  reviewState.persistent = true;
+  return data.comment;
 }
 
 export function setRoute(path) {
@@ -100,33 +111,40 @@ export function setAuthor(name) {
   }
 }
 
-export function addComment({ frs, anchor, body }) {
+function showComment(comment) {
+  const index = reviewState.comments.findIndex((item) => item.id === comment.id);
+  if (index >= 0) reviewState.comments.splice(index, 1, comment);
+  else reviewState.comments.push(comment);
+}
+
+export async function addComment({ id, frs, anchor, body, route = reviewState.route }) {
   /** @type {ReviewComment} */
   const c = {
-    id: genId(),
+    id,
     frs,
-    route: reviewState.route,
+    route,
     anchor,
     body: body.trim(),
-    author: reviewState.author,
+    author: reviewState.author.trim() || "PM",
     status: "open",
     createdAt: new Date().toISOString(),
     replies: [],
   };
-  reviewState.comments.push(c);
+  showComment(reviewState.memoryOnly ? c : hydrate(await write("create", c)));
   reviewState.activeCommentId = c.id;
-  apiUpsert(c);
   return c;
 }
 
-export function updateComment(c) {
-  const idx = reviewState.comments.findIndex((x) => x.id === c.id);
-  if (idx >= 0) reviewState.comments.splice(idx, 1, c);
-  apiUpsert(c);
+export async function updateComment(c, { status, reply }) {
+  if (reviewState.memoryOnly) {
+    showComment({ ...c, ...(status && { status }), ...(reply && { replies: [...c.replies, reply] }) });
+    return;
+  }
+  showComment(hydrate(await write("update", { id: c.id, frs: c.frs, status, reply })));
 }
 
-export function removeComment(c) {
+export async function removeComment(c) {
+  if (!reviewState.memoryOnly) await write("delete", { id: c.id, frs: c.frs });
   reviewState.comments = reviewState.comments.filter((x) => x.id !== c.id);
-  apiDelete(c);
 }
 

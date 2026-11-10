@@ -18,3 +18,18 @@
 
 **结论**：未通过（2 项待实现）。
 **问题跟踪**：FP1 的一次性提示与 FP3 的撤销能力进入下一轮开发。
+
+### Round 2 — 2026-11-09
+
+本轮验证 AC6–AC8。使用临时批注目录和本机 Chrome。
+
+| 验收 | 实测 | 状态 |
+|------|------|------|
+| AC6 并发保存与重试 | 同一文件保留 16 条中间件写入、宿主新增及 CLI 和宿主回复。重试不会重复添加回复。Chrome 中模拟首次保存失败，重试后重新加载页面仍可见批注，随后回复和解决成功。 | 通过 |
+| AC7 实例定位 | React 示例侧栏选中第二个共享坐标的按钮时命中该按钮。完全相同的候选不显示 Pin，关闭对应浮层后不定位到其他浮层。 | 通过 |
+| AC8 写入来源 | 异源、同站异源、不同协议和非 JSON 请求返回 403。内嵌代理放行来自预览页的同源请求并验证转发来源。 | 通过 |
+
+`node bin/builderharness.mjs verify 10202200_REVIEW` 及 `--status` 均通过。
+证据保存在 `.builderharness/verification/10202200_REVIEW/` 的
+`review-writes.json` 和 `review-browser.json` 所指日志。代理回归位于
+`integrations/test-integrations.mjs`。

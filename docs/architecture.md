@@ -85,9 +85,17 @@ The source transforms inject `data-loc`, `data-comp` and, for Vue component
 usage sites, `data-use`. JSX transforms annotate intrinsic elements; custom
 React components are not assumed to forward arbitrary props.
 
-[`client/review/anchor.js`](../client/review/anchor.js) reports `exact`, `moved`,
-`approx` or `lost`. A fallback is exposed to the reviewer rather than presented
-as an exact source match.
+[`client/review/anchor.js`](../client/review/anchor.js) checks visible candidates
+within the review region or matching overlay. A shared source coordinate can
+identify an instance when its role and name are unique. The drawer reports
+ambiguous matches and omits the pin when it cannot distinguish the instances.
+
+The browser, CLI and agent host serialize updates to each review file and
+replace the JSON atomically. Browser replies and status changes update the
+current record. The dev review middleware accepts same-origin JSON writes.
+The desktop preview proxy checks the browser-facing origin before forwarding it.
+If a process is forcibly stopped while holding a lock, stop the review writers
+before removing the reported `.json.lock` file.
 
 ## Checks, approval and optional integrations
 

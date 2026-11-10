@@ -3,12 +3,15 @@ import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { builderHarness } from "../../vite.mjs";
+import { baseUrl } from "./builderharness.config.json";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const kitRoot = path.resolve(root, "../..");
+const { hostname, port } = new URL(baseUrl);
 
 export default defineConfig({
   root,
+  server: { host: hostname, port: Number(port) },
   plugins: [
     builderHarness({
       root,
@@ -26,7 +29,6 @@ export default defineConfig({
       // consumer would use `builderharness/react` and `builderharness/ui` directly.
       { find: /^builderharness\/react$/, replacement: path.join(kitRoot, "client/adapters/react.jsx") },
       { find: /^builderharness\/ui$/, replacement: path.join(kitRoot, "ui-spec/impl/react/index.ts") },
-      { find: /^@\//, replacement: path.join(root, "src") + "/" },
     ],
   },
   css: {
