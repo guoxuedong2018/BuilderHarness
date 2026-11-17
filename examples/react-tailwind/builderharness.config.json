@@ -1,5 +1,8 @@
 {
-  "adapter": "react-vite",
+  "adapter": "./adapter.mjs",
   "routeMode": "hash",
-  "baseUrl": "http://localhost:5173"
+  "baseUrl": "http://localhost:5173",
+  "verificationService": {
+    "command": ["npm", "run", "dev", "--", "--strictPort"]
+  }
 }

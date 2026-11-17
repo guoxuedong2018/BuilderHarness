@@ -12,7 +12,7 @@ import { initializeAgent } from "../pipeline/lib/agent-init.mjs";
 
 const kitRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 async function fixture(run) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "bh-agent-"));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "bh-agent-")));
   const write = async (file, text) => { await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true }); await fs.writeFile(path.join(root, file), text); };
   try { await run(root, write); } finally { await fs.rm(root, { recursive: true, force: true }); }
 }

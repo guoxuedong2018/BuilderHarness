@@ -1,8 +1,8 @@
 # Helix · BuilderHarness React + Tailwind demo
 
 A synthetic product workspace that demonstrates BuilderHarness on a **React 19 +
-Tailwind 4.3** prototype. It is intentionally data-free: every project, person
-and metric is made up.
+Tailwind 4.3** prototype in the source checkout. Every project, person and metric
+is made up. For a new app, use the [React starter](../../scaffold/README.md#start-a-react-app).
 
 ## Run it
 
@@ -20,9 +20,24 @@ Production build:
 npm run build:demo
 ```
 
-The demo runs from `examples/react-tailwind`, so BuilderHarness treats that folder
+The root commands delegate to the example's `dev` and `build` scripts. The demo
+runs from `examples/react-tailwind`, so BuilderHarness treats that folder
 as the host project (`docs/`, `src/`, `package.json`). Review comments are
 written to `examples/react-tailwind/docs/reviews/`.
+
+## Check the example
+
+With Chrome or Chromium installed and port 5173 free, run this from the repository root.
+
+```bash
+npm run check:demo
+```
+
+It checks syntax and FRS, starts and stops Vite for the two browser acceptance
+scenarios, then builds and scans the production artifact. The verification logs
+and screenshots are under the example's `.builderharness/verification/EXPERIMENTS/`.
+If the example is already running, use `node ../../bin/builderharness.mjs verify EXPERIMENTS`
+from the example directory.
 
 ## What to try
 
@@ -59,23 +74,12 @@ The Vite config aliases the in-repo package subpaths:
 A project that installs the published package does not need those aliases; it
 imports `builderharness/react` and `builderharness/ui` directly.
 
-## Copy it out
-
-To use this as a starting point for a real prototype:
-
-1. Copy the folder.
-2. Replace `"builderharness": "file:../.."` with the published version.
-3. Keep `docs/` next to `src/`; BuilderHarness detects the project root from it.
-4. Run `npm install && npm run dev`.
-5. Keep the dev-only dynamic import in `src/main.jsx`; production builds strip
-   BuilderHarness and React never enters the artifact as part of the toolkit.
-
 ## Tailwind notes
 
 - `tailwind.config.cjs` reuses the canonical token config and adds the demo and
   toolkit source paths. Paths are absolute because Vite may run from the repo
   root.
-- `postcss.config.cjs` uses `@tailwindcss/postcss`; `src/styles.css` loads the
-  canonical config through `@config` for the same reason.
+- `postcss.config.cjs` uses `@tailwindcss/postcss`. `src/styles.css` loads the
+  example's Tailwind config through `@config`.
 - Do not add a second accent color. The only accent is `--accent`; status colors
   are paired with icons or text.

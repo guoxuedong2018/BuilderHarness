@@ -3,7 +3,7 @@ import { useSnapshot } from "valtio";
 
 import { Btn, cx } from "../core/ui";
 import { CONFIDENCE_HINT, createAnchor, formatLoc, pinPosition, relocate } from "./anchor";
-import { addComment, reviewState } from "./store";
+import { addComment, newReviewId, reviewState } from "./store";
 import "./CommentLayer.less";
 
 const isReviewUi = (el) => !!(el && el.closest("[data-review-ui]"));
@@ -12,7 +12,8 @@ const isReviewUi = (el) => !!(el && el.closest("[data-review-ui]"));
 const DRAFT_PREFIX = "builderharness:comment-draft:";
 function draftKeyOf(anchor) {
   const src = anchor?.src ? `${anchor.src.file}:${anchor.src.line}:${anchor.src.col}` : anchor?.selector || anchor?.label || "";
-  return `${DRAFT_PREFIX}${reviewState.route}:${src}`;
+  const instance = anchor.sharedSource ? `:${anchor.name}:${anchor.selector}` : "";
+  return `${DRAFT_PREFIX}${reviewState.route}:${src}${instance}`;
 }
 function readDraft(key) {
   try {
@@ -52,11 +53,14 @@ export function CommentLayer() {
   const [composer, setComposer] = useState(null);
   const [draft, setDraft] = useState("");
   const [draftKey, setDraftKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   // 按住 ⌘/Ctrl 临时进入圈选模式，与工具栏的常驻 commentMode 并行生效
   const [metaHeld, setMetaHeld] = useState(false);
   // 滚动 / 缩放 / 抽屉开合 / 浮层开合后靠它触发 Pin 位置重算
   const [, bump] = useReducer((n) => n + 1, 0);
   const inputRef = useRef(null);
+  const submitting = useRef(false);
 
   const picking = snap.commentMode || metaHeld;
   // 监听器挂在 window 上只注册一次，读最新值走 ref
@@ -81,14 +85,16 @@ export function CommentLayer() {
       e.stopPropagation();
       const anchor = createAnchor(el, e.clientX, e.clientY);
       const key = draftKeyOf(anchor);
-      setComposer({ x: e.clientX, y: e.clientY, anchor });
+      setComposer({ x: e.clientX, y: e.clientY, anchor, id: newReviewId(), route: reviewState.route });
       setDraftKey(key);
       setDraft(readDraft(key));
+      setSaveError("");
       setHover(null);
     };
     const onKeyDown = (e) => {
       if (e.key === "Meta" || e.key === "Control") setMetaHeld(true);
       if (e.key !== "Escape") return;
+      if (submitting.current) return;
       // Esc：先关输入气泡，否则退出评论模式。草稿留在 localStorage，
       // 重新点同一个元素还能接着写；只有显式「取消」才丢弃。
       if (live.current.composer) {
@@ -162,12 +168,23 @@ export function CommentLayer() {
     setDraft("");
     if (draftKey) writeDraft(draftKey, "");
     setDraftKey("");
+    setSaveError("");
   };
-  const submit = () => {
-    if (!composer || !draft.trim()) return;
-    addComment({ frs: composer.anchor.frs, anchor: composer.anchor, body: draft });
-    cancel();
-    reviewState.drawerOpen = true;
+  const submit = async () => {
+    if (!composer || !draft.trim() || submitting.current) return;
+    submitting.current = true;
+    setSaving(true);
+    setSaveError("");
+    try {
+      await addComment({ id: composer.id, route: composer.route, frs: composer.anchor.frs, anchor: composer.anchor, body: draft });
+      cancel();
+      reviewState.drawerOpen = true;
+    } catch (error) {
+      setSaveError(error.message);
+    } finally {
+      submitting.current = false;
+      setSaving(false);
+    }
   };
 
   const pins = snap.comments
@@ -235,11 +252,16 @@ export function CommentLayer() {
           <textarea
             ref={inputRef}
             value={draft}
+            disabled={saving}
             className="cl-textarea"
             placeholder="写下对该元素的修改建议…（⌘/Ctrl + Enter 提交）"
             onChange={(e) => {
               setDraft(e.target.value);
               if (draftKey) writeDraft(draftKey, e.target.value);
+              if (saveError) {
+                setComposer({ ...composer, id: newReviewId() });
+                setSaveError("");
+              }
             }}
             onKeyDown={(e) => {
               // EDGE-01: do not submit while an IME candidate window is composing.
@@ -247,10 +269,11 @@ export function CommentLayer() {
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit();
             }}
           />
+          {saveError && <div className="cl-save-error" role="alert">保存失败。{saveError}</div>}
           <div className="cl-actions">
-            <Btn onClick={cancel}>取消</Btn>
-            <Btn kind="primary" disabled={!draft.trim()} onClick={submit}>
-              添加评论
+            <Btn disabled={saving} onClick={cancel}>取消</Btn>
+            <Btn kind="primary" disabled={saving || !draft.trim()} onClick={submit}>
+              {saving ? "保存中…" : "添加评论"}
             </Btn>
           </div>
         </div>

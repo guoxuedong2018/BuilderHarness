@@ -192,6 +192,11 @@
     color: @color-status-warning;
   }
 
+  .cd-save-error {
+    color: @color-danger;
+    overflow-wrap: anywhere;
+  }
+
   .cd-body {
     margin: 0;
     white-space: pre-wrap;
@@ -274,8 +279,13 @@
     border-radius: @radius-control;
     cursor: pointer;
 
-    &:hover {
+    &:not(:disabled):hover {
       background: @color-hover-bg;
+    }
+
+    &:disabled {
+      color: @color-text-disabled;
+      cursor: default;
     }
   }
 

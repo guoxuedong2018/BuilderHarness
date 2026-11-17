@@ -19,7 +19,7 @@ current project without overwriting existing files.
 | `docs/kb/clips.config.mjs` | clip/GIF recipe registry |
 | `src/config/frs-map.js` | route ↔ feature-region registry |
 | `src/utils/contrast.js` | WCAG contrast helper used by `check-ui` and the design-system page |
-| `starter/` | Vite + React + Tailwind starter copied by the desktop “new project” flow |
+| `starter/` | Vite + React + Tailwind starter for a standalone app and the desktop “new project” flow |
 | `.agent/skills/` | requirement review, PRD authoring, content drafting, review, UI, quality and optional Vue 2 skills |
 | `AGENTS.md` / `CLAUDE.md` | project guide and Claude Code entrypoint |
 | `.gitignore` | ignores generated reviews, PRD, media caches and credentials |
@@ -44,3 +44,18 @@ The scaffold deliberately contains no product data, internal domains, credential
 or example business rules. Those belong to the host project.
 
 Default `init` connects an existing agent without the complete scaffold. See [migration](../docs/migration-0.9.md).
+
+## Start a React app
+
+Copy the contents of `starter/` into a new project directory. From a source
+checkout, create the two tarballs described in the [installation guide](../docs/getting-started.md#install-from-a-source-checkout).
+In the new project, install the tarballs and initialize the workspace.
+
+```bash
+npm install /path/to/builderharness-VERSION.tgz /path/to/builderharness-browser-VERSION.tgz
+npx builderharness init --scaffold
+npm run dev
+```
+
+The starter uses the package's Vite and React exports. Run `npm run build` and
+`npx builderharness preflight` to verify the production output.

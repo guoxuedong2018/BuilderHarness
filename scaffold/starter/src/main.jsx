@@ -9,7 +9,7 @@ if (import.meta.env.DEV) {
   import("builderharness/react").then(({ BuilderHarnessRoot }) => {
     root.render(
       <StrictMode>
-        <BuilderHarnessRoot router={hashRouter()}>
+        <BuilderHarnessRoot>
           <App />
         </BuilderHarnessRoot>
       </StrictMode>,
@@ -21,18 +21,4 @@ if (import.meta.env.DEV) {
       <App />
     </StrictMode>,
   );
-}
-
-function hashRouter() {
-  return {
-    current: () => window.location.hash.slice(1) || "/",
-    subscribe: (listener) => {
-      window.addEventListener("hashchange", listener);
-      return () => window.removeEventListener("hashchange", listener);
-    },
-    href: (path) => `#${path}`,
-    push: (path) => {
-      window.location.hash = path;
-    },
-  };
 }

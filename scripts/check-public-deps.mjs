@@ -4,9 +4,7 @@
  *
  * This is intentionally offline: it checks the manifests and the lockfiles, not
  * the network. It keeps a corporate mirror or a local `link:` dependency from
- * slipping into the published package or a committed lockfile. The in-repo
- * demo's `file:../..` link is intentionally out of scope; it only exists to
- * exercise the local source.
+ * slipping into the published package or a committed lockfile.
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
